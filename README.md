@@ -155,29 +155,79 @@ src/
 
 ```
 TypeScript 파일
-  → TypeScript AST  (인터페이스 파싱)
-  → faker           (필드 타입에 맞는 랜덤 데이터 생성)
+  → ts.createProgram()   전체 프로그램 빌드 (tsconfig.json 자동 탐색)
+  → TypeChecker          import 체인 + node_modules 타입까지 완전 해석
+  → faker                필드 타입에 맞는 랜덤 데이터 생성
   → export const mockXxx: Xxx = { ... }
 ```
 
-개발자는 TypeScript 인터페이스만 작성하면 됩니다.
+프로젝트 루트의 `tsconfig.json`을 자동으로 탐색해 컴파일 옵션을 그대로 사용합니다.
+
+### 타입 해석 흐름
+
+로컬 타입은 AST 기반으로 빠르게 처리하고, 외부 타입은 TypeChecker를 통해 재귀적으로 전개합니다.
+
+```
+TypeReference 만날 때
+  ├─ 로컬 typeMap에 있음  → AST 기반 즉시 전개 (빠름)
+  └─ 없음
+      ├─ checker.getSymbolAtLocation()  → Declaration 탐색
+      │    ├─ InterfaceDeclaration  → 프로퍼티 전개
+      │    ├─ TypeAliasDeclaration  → 타입 노드 재귀 전개
+      │    ├─ EnumDeclaration       → 멤버 중 랜덤 선택
+      │    └─ ClassDeclaration      → 프로퍼티 전개
+      └─ checker.getTypeAtLocation()  → 타입 시스템 레벨 전개
+```
 
 ---
 
-## 주의사항
+## 지원 범위
 
-### 정상 동작하는 경우
+### 타입
 
-**타입 지원**
-- `enum` → `UserRole.Admin` 형태의 정확한 참조값으로 생성됩니다.
-- `union`, `intersection`, `tuple` 지원
-- `Partial` / `Required` / `Readonly` / `Pick` / `Omit` / `Promise` / `Array<T>` 지원
-- `interface extends`로 상속받은 필드도 포함됩니다.
-- 상대경로(`./`, `../`)로 import한 타입은 자동으로 따라가 파싱합니다.
+| 항목 | 지원 여부 |
+|---|---|
+| `interface`, `type alias`, `enum` | ✓ |
+| `union`, `intersection`, `tuple` | ✓ |
+| `Partial` / `Required` / `Readonly` / `Pick` / `Omit` / `Promise` / `Array<T>` | ✓ |
+| `interface extends` 상속 필드 | ✓ |
+| 상대경로 import (`./`, `../`) 타입 | ✓ 재귀 추적 |
+| node_modules 외부 패키지 타입 | ✓ TypeChecker로 추적 |
+| `A.B` 형태 네임스페이스 타입 (`WebAssembly.Memory` 등) | ✓ TypeChecker로 추적 |
+| 순환 참조 타입 | ✓ 자동 차단 (depth limit 6) |
+| 함수 타입 필드 | △ 생략됨 |
+| `Extract`, `Exclude`, `ReturnType`, `Parameters` 등 고급 유틸리티 | △ `{}` 로 생성됨 |
 
-**필드명 기반 데이터 생성**
+### node_modules 타입 예시
 
-필드명을 인식해 타입에 맞는 값을 생성합니다:
+```ts
+// src/types/memory.ts
+export interface GameState {
+  memory: WebAssembly.Memory   // node_modules 내장 전역 타입
+  buffer: ArrayBuffer
+}
+```
+
+```bash
+ts-to-mock src/types/memory.ts
+```
+
+```ts
+export const mockGameState: GameState = {
+  memory: {
+    buffer: {
+      byteLength: 57
+    }
+  },
+  buffer: {
+    byteLength: 83
+  }
+}
+```
+
+### 필드명 기반 데이터 생성
+
+필드명을 인식해 의미있는 값을 생성합니다:
 
 | 패턴 | 예시 필드명 | 생성 값 |
 |---|---|---|
@@ -188,17 +238,13 @@ TypeScript 파일
 | `*At` 접미사 | `createdAt`, `updatedAt`, `joinedAt` | ISO 날짜 문자열 |
 | `*Date` 접미사 | `startDate`, `endDate`, `dueDate` | ISO 날짜 문자열 |
 | `*Url` 접미사 | `avatarUrl`, `imageUrl` | URL |
-| 그 외 `string` | - | lorem ipsum 단어 |
-
-### 제한사항
-
-**`WebAssembly.Memory`, `React.ReactNode` 같은 네임스페이스 전역 타입은 `{}` 로 생성됩니다.**
-
-`A.B` 형태의 타입은 TypeScript 내장 전역 선언이라 파일 파싱으로 접근할 수 없습니다.
+| 그 외 `string` | — | lorem ipsum 단어 |
 
 ---
 
-**함수 타입 필드는 생성 결과에서 사라집니다.**
+## 주의사항
+
+**함수 타입 필드는 생성 결과에서 생략됩니다.**
 
 ```ts
 export interface Ctx {
@@ -206,24 +252,14 @@ export interface Ctx {
 }
 ```
 
-TypeScript는 타입 오류를 낼 수 있으므로 생성 후 수동으로 `jest.fn()` 등을 채워야 합니다.
+생성 후 수동으로 `jest.fn()` 등을 채워야 합니다.
 
 ---
 
-**일부 유틸리티 타입은 `{}` 로 생성됩니다.**
-
-`Extract`, `Exclude`, `ReturnType`, `Parameters` 등의 고급 유틸리티 타입은 처리하지 못합니다.
+**`Extract`, `Exclude`, `ReturnType`, `Parameters` 등 고급 유틸리티 타입은 `{}` 로 생성됩니다.**
 
 ---
 
 **옵셔널 필드(`?`)는 약 30% 확률로 생략됩니다.**
 
 실행마다 결과가 달라지므로, 특정 필드가 반드시 필요하면 생성 후 직접 추가합니다.
-
----
-
-**순환 참조 타입은 지원하지 않습니다.**
-
-```ts
-interface A { self?: A }  // → 스택 오버플로우 발생
-```

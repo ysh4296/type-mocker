@@ -72,8 +72,9 @@ Examples:
   .action((tsFile: string, opts: { count: string; out?: string; schema?: string }) => {
     let typeMap: ReturnType<typeof parseTypes>["typeMap"]
     let exportedNames: string[]
+    let checker: ReturnType<typeof parseTypes>["checker"]
     try {
-      ;({ typeMap, exportedNames } = parseTypes(resolve(tsFile)))
+      ;({ typeMap, exportedNames, checker } = parseTypes(resolve(tsFile)))
     } catch (e) {
       die(`Cannot parse file: ${tsFile}\n${e}`)
     }
@@ -93,7 +94,7 @@ Examples:
       : exportedNames
 
     const body = targets
-      .map(n => toTsVar(count === 1 ? toMock(n, typeMap) : toMockList(n, typeMap, count), n, count))
+      .map(n => toTsVar(count === 1 ? toMock(n, typeMap, checker) : toMockList(n, typeMap, count, checker), n, count))
       .join("\n\n")
 
     const out = opts.out

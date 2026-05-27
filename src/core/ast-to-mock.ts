@@ -79,7 +79,106 @@ type TypeEntry =
 
 export type TypeMap = Map<string, TypeEntry>
 
-function interfaceToMock(node: ts.InterfaceDeclaration, typeMap: TypeMap): Record<string, unknown> {
+// TypeChecker + 순환 참조 방지용 컨텍스트
+type Ctx = { checker: ts.TypeChecker; resolving: Set<ts.Declaration> }
+
+// ─── TypeChecker 기반 타입 전개 ─────────────────────────────────────────────
+
+function expandCheckerType(type: ts.Type, field: string, typeMap: TypeMap, ctx: Ctx, depth = 0): unknown {
+  if (depth > 6) return {}
+
+  if (type.flags & ts.TypeFlags.String)    return getStringHint(field)
+  if (type.flags & ts.TypeFlags.Number)    return faker.number.int({ min: 0, max: 100 })
+  if (type.flags & ts.TypeFlags.Boolean)   return faker.datatype.boolean()
+  if (type.flags & ts.TypeFlags.Null)      return null
+  if (type.flags & ts.TypeFlags.Undefined) return undefined
+  if (type.flags & ts.TypeFlags.Void)      return undefined
+  if (type.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown)) return {}
+  if (type.flags & ts.TypeFlags.Never)     return null
+
+  if (type.isStringLiteral()) return type.value
+  if (type.isNumberLiteral()) return type.value
+  if (type.flags & ts.TypeFlags.BooleanLiteral) return faker.datatype.boolean()
+
+  if (type.isUnion()) {
+    const concrete = type.types.filter(t => !(t.flags & (ts.TypeFlags.Undefined | ts.TypeFlags.Null)))
+    const pool = concrete.length > 0 ? concrete : type.types
+    return expandCheckerType(faker.helpers.arrayElement(pool), field, typeMap, ctx, depth)
+  }
+
+  if (type.isIntersection()) {
+    const parts = type.types.map(t => {
+      const v = expandCheckerType(t, field, typeMap, ctx, depth)
+      return typeof v === "object" && v !== null ? v : {}
+    })
+    return Object.assign({}, ...parts)
+  }
+
+  // 배열 타입
+  if (ctx.checker.isArrayType(type)) {
+    const args = ctx.checker.getTypeArguments(type as ts.TypeReference)
+    if (args.length) {
+      const len = faker.number.int({ min: 1, max: 4 })
+      return Array.from({ length: len }, () => expandCheckerType(args[0], "", typeMap, ctx, depth + 1))
+    }
+    return []
+  }
+
+  // 객체/인터페이스/클래스 - 프로퍼티 전개
+  const props = type.getProperties()
+  if (props.length) {
+    const result: Record<string, unknown> = {}
+    for (const prop of props) {
+      if (prop.flags & ts.SymbolFlags.Method) continue
+      const propType = ctx.checker.getTypeOfSymbol(prop)
+      const optional = (prop.flags & ts.SymbolFlags.Optional) !== 0
+      if (optional && Math.random() < 0.3) continue
+      result[prop.name] = expandCheckerType(propType, prop.name, typeMap, ctx, depth + 1)
+    }
+    return result
+  }
+
+  return {}
+}
+
+// Symbol → Declaration → mock 변환 (node_modules 포함)
+function resolveSymbolToMock(symbol: ts.Symbol, typeMap: TypeMap, ctx: Ctx): unknown {
+  const resolved = symbol.flags & ts.SymbolFlags.Alias
+    ? ctx.checker.getAliasedSymbol(symbol)
+    : symbol
+
+  const decls = resolved.getDeclarations()
+  if (!decls?.length) return {}
+
+  const decl = decls[0]
+  if (ctx.resolving.has(decl)) return {}
+  ctx.resolving.add(decl)
+
+  try {
+    if (ts.isInterfaceDeclaration(decl))  return interfaceToMock(decl, typeMap, ctx)
+    if (ts.isTypeAliasDeclaration(decl))  return typeNodeToMock(decl.type, typeMap, undefined, ctx)
+    if (ts.isEnumDeclaration(decl)) {
+      const members    = [...decl.members]
+      const picked     = faker.helpers.arrayElement(members)
+      const memberName = ts.isIdentifier(picked.name) ? picked.name.text : String(members.indexOf(picked))
+      return new EnumRef(`${decl.name?.text ?? "Enum"}.${memberName}`)
+    }
+    // 클래스 (ex: WebAssembly.Memory, Buffer 등)
+    if (ts.isClassDeclaration(decl)) {
+      const type = ctx.checker.getDeclaredTypeOfSymbol(resolved)
+      return expandCheckerType(type, "", typeMap, ctx)
+    }
+    // 그 외 (mapped type, namespace 등) → checker로 타입 전개
+    const type = ctx.checker.getDeclaredTypeOfSymbol(resolved)
+    return expandCheckerType(type, "", typeMap, ctx)
+  } finally {
+    ctx.resolving.delete(decl)
+  }
+}
+
+// ─── AST 기반 mock 변환 (로컬 타입, 빠른 경로) ──────────────────────────────
+
+function interfaceToMock(node: ts.InterfaceDeclaration, typeMap: TypeMap, ctx?: Ctx): Record<string, unknown> {
   const result: Record<string, unknown> = {}
 
   if (node.heritageClauses) {
@@ -88,28 +187,37 @@ function interfaceToMock(node: ts.InterfaceDeclaration, typeMap: TypeMap): Recor
       for (const type of clause.types) {
         const name = ts.isIdentifier(type.expression) ? type.expression.text : ""
         const entry = name ? typeMap.get(name) : undefined
-        if (entry?.kind === "interface") Object.assign(result, interfaceToMock(entry.node, typeMap))
+        if (entry?.kind === "interface") {
+          Object.assign(result, interfaceToMock(entry.node, typeMap, ctx))
+        } else if (ctx) {
+          const sym = ctx.checker.getSymbolAtLocation(type.expression)
+          if (sym) {
+            const v = resolveSymbolToMock(sym, typeMap, ctx)
+            if (typeof v === "object" && v !== null && !(v instanceof EnumRef)) Object.assign(result, v)
+          }
+        }
       }
     }
   }
 
-  Object.assign(result, typeElementsToMock(node.members, typeMap))
+  Object.assign(result, typeElementsToMock(node.members, typeMap, ctx))
   return result
 }
 
 function typeElementsToMock(
   members: ts.NodeArray<ts.TypeElement>,
   typeMap: TypeMap,
+  ctx?: Ctx,
 ): Record<string, unknown> {
   const result: Record<string, unknown> = {}
   for (const member of members) {
     if (!ts.isPropertySignature(member) || !member.type) continue
-    const key = ts.isIdentifier(member.name) ? member.name.text
+    const key = ts.isIdentifier(member.name)    ? member.name.text
       : ts.isStringLiteral(member.name) ? member.name.text
       : ""
     if (!key) continue
     if (member.questionToken && Math.random() < 0.3) continue
-    result[key] = typeNodeToMock(member.type, typeMap, key)
+    result[key] = typeNodeToMock(member.type, typeMap, key, ctx)
   }
   return result
 }
@@ -120,7 +228,7 @@ function extractLiteralKeys(node: ts.TypeNode): string[] {
   return []
 }
 
-function typeNodeToMock(node: ts.TypeNode, typeMap: TypeMap, fieldName?: string): unknown {
+function typeNodeToMock(node: ts.TypeNode, typeMap: TypeMap, fieldName?: string, ctx?: Ctx): unknown {
   switch (node.kind) {
     case ts.SyntaxKind.StringKeyword:
       return fieldName ? getStringHint(fieldName) : faker.lorem.word()
@@ -153,7 +261,7 @@ function typeNodeToMock(node: ts.TypeNode, typeMap: TypeMap, fieldName?: string)
     case ts.SyntaxKind.ArrayType: {
       const len = faker.number.int({ min: 1, max: 4 })
       return Array.from({ length: len }, () =>
-        typeNodeToMock((node as ts.ArrayTypeNode).elementType, typeMap)
+        typeNodeToMock((node as ts.ArrayTypeNode).elementType, typeMap, undefined, ctx)
       )
     }
 
@@ -163,33 +271,33 @@ function typeNodeToMock(node: ts.TypeNode, typeMap: TypeMap, fieldName?: string)
         t => t.kind !== ts.SyntaxKind.UndefinedKeyword && t.kind !== ts.SyntaxKind.NullKeyword
       )
       const pool = concrete.length > 0 && Math.random() > 0.2 ? concrete : types
-      return typeNodeToMock(faker.helpers.arrayElement(pool), typeMap, fieldName)
+      return typeNodeToMock(faker.helpers.arrayElement(pool), typeMap, fieldName, ctx)
     }
 
     case ts.SyntaxKind.IntersectionType: {
       const parts = (node as ts.IntersectionTypeNode).types.map(t => {
-        const v = typeNodeToMock(t, typeMap)
+        const v = typeNodeToMock(t, typeMap, undefined, ctx)
         return typeof v === "object" && v !== null ? v : {}
       })
       return Object.assign({}, ...parts)
     }
 
     case ts.SyntaxKind.TypeLiteral:
-      return typeElementsToMock((node as ts.TypeLiteralNode).members, typeMap)
+      return typeElementsToMock((node as ts.TypeLiteralNode).members, typeMap, ctx)
 
     case ts.SyntaxKind.ParenthesizedType:
-      return typeNodeToMock((node as ts.ParenthesizedTypeNode).type, typeMap, fieldName)
+      return typeNodeToMock((node as ts.ParenthesizedTypeNode).type, typeMap, fieldName, ctx)
 
     case ts.SyntaxKind.TupleType:
       return (node as ts.TupleTypeNode).elements.map(e =>
         ts.isNamedTupleMember(e)
-          ? typeNodeToMock(e.type, typeMap)
-          : typeNodeToMock(e as ts.TypeNode, typeMap)
+          ? typeNodeToMock(e.type, typeMap, undefined, ctx)
+          : typeNodeToMock(e as ts.TypeNode, typeMap, undefined, ctx)
       )
 
     case ts.SyntaxKind.OptionalType:
       return Math.random() > 0.3
-        ? typeNodeToMock((node as ts.OptionalTypeNode).type, typeMap, fieldName)
+        ? typeNodeToMock((node as ts.OptionalTypeNode).type, typeMap, fieldName, ctx)
         : undefined
 
     case ts.SyntaxKind.FunctionType:
@@ -197,56 +305,100 @@ function typeNodeToMock(node: ts.TypeNode, typeMap: TypeMap, fieldName?: string)
       return () => undefined
 
     case ts.SyntaxKind.TypeReference: {
-      const refNode  = node as ts.TypeReferenceNode
-      if (!ts.isIdentifier(refNode.typeName)) return {}
-      const typeName = refNode.typeName.text
+      const refNode = node as ts.TypeReferenceNode
 
-      if (typeName === "Date")    return faker.date.recent().toISOString()
-      if (typeName === "Array" && refNode.typeArguments?.length) {
-        const len = faker.number.int({ min: 1, max: 4 })
-        return Array.from({ length: len }, () =>
-          typeNodeToMock(refNode.typeArguments![0], typeMap)
-        )
-      }
-      if ((typeName === "Partial" || typeName === "Required" || typeName === "Readonly") && refNode.typeArguments?.length) {
-        return typeNodeToMock(refNode.typeArguments[0], typeMap, fieldName)
-      }
-      if (typeName === "Pick" && refNode.typeArguments?.length === 2) {
-        const base = typeNodeToMock(refNode.typeArguments[0], typeMap)
-        if (typeof base !== "object" || base === null) return base
-        const keys = extractLiteralKeys(refNode.typeArguments[1])
-        return Object.fromEntries(
-          keys.map(k => [k, (base as Record<string, unknown>)[k]])
-        )
-      }
-      if (typeName === "Omit" && refNode.typeArguments?.length === 2) {
-        const base = typeNodeToMock(refNode.typeArguments[0], typeMap)
-        if (typeof base !== "object" || base === null) return base
-        const keys = new Set(extractLiteralKeys(refNode.typeArguments[1]))
-        return Object.fromEntries(
-          Object.entries(base as Record<string, unknown>).filter(([k]) => !keys.has(k))
-        )
-      }
-      if (typeName === "Promise" && refNode.typeArguments?.length) {
-        return typeNodeToMock(refNode.typeArguments[0], typeMap)
-      }
-      if (typeName === "Record") return {}
+      // 단순 Identifier인 경우 → 내장 유틸리티 & 로컬 typeMap 우선 처리
+      if (ts.isIdentifier(refNode.typeName)) {
+        const typeName = refNode.typeName.text
 
-      const entry = typeMap.get(typeName)
-      if (!entry) return null
+        if (typeName === "Date") return faker.date.recent().toISOString()
+        if (typeName === "Array" && refNode.typeArguments?.length) {
+          const len = faker.number.int({ min: 1, max: 4 })
+          return Array.from({ length: len }, () =>
+            typeNodeToMock(refNode.typeArguments![0], typeMap, undefined, ctx)
+          )
+        }
+        if ((typeName === "Partial" || typeName === "Required" || typeName === "Readonly") && refNode.typeArguments?.length) {
+          return typeNodeToMock(refNode.typeArguments[0], typeMap, fieldName, ctx)
+        }
+        if (typeName === "Pick" && refNode.typeArguments?.length === 2) {
+          const base = typeNodeToMock(refNode.typeArguments[0], typeMap, undefined, ctx)
+          if (typeof base !== "object" || base === null) return base
+          const keys = extractLiteralKeys(refNode.typeArguments[1])
+          return Object.fromEntries(keys.map(k => [k, (base as Record<string, unknown>)[k]]))
+        }
+        if (typeName === "Omit" && refNode.typeArguments?.length === 2) {
+          const base = typeNodeToMock(refNode.typeArguments[0], typeMap, undefined, ctx)
+          if (typeof base !== "object" || base === null) return base
+          const keys = new Set(extractLiteralKeys(refNode.typeArguments[1]))
+          return Object.fromEntries(
+            Object.entries(base as Record<string, unknown>).filter(([k]) => !keys.has(k))
+          )
+        }
+        if (typeName === "Promise" && refNode.typeArguments?.length) {
+          return typeNodeToMock(refNode.typeArguments[0], typeMap, undefined, ctx)
+        }
+        if (typeName === "Record") return {}
 
-      if (entry.kind === "enum") {
-        const members    = [...entry.node.members]
-        const picked     = faker.helpers.arrayElement(members)
-        const memberName = ts.isIdentifier(picked.name) ? picked.name.text : String(members.indexOf(picked))
-        return new EnumRef(`${typeName}.${memberName}`)
+        const entry = typeMap.get(typeName)
+        if (entry) {
+          if (entry.kind === "enum") {
+            const members    = [...entry.node.members]
+            const picked     = faker.helpers.arrayElement(members)
+            const memberName = ts.isIdentifier(picked.name) ? picked.name.text : String(members.indexOf(picked))
+            return new EnumRef(`${typeName}.${memberName}`)
+          }
+          if (entry.kind === "interface") return interfaceToMock(entry.node, typeMap, ctx)
+          return typeNodeToMock(entry.node, typeMap, fieldName, ctx)
+        }
       }
-      if (entry.kind === "interface") return interfaceToMock(entry.node, typeMap)
-      return typeNodeToMock(entry.node, typeMap, fieldName)
+
+      // 로컬 typeMap에 없는 경우 → TypeChecker로 외부 타입(node_modules 포함) 해석
+      if (ctx) {
+        const sym = ctx.checker.getSymbolAtLocation(refNode.typeName)
+        if (sym) return resolveSymbolToMock(sym, typeMap, ctx)
+
+        // QualifiedName (A.B) 등 symbol을 못 가져온 경우 → 타입 직접 전개
+        const type = ctx.checker.getTypeAtLocation(refNode)
+        if (!(type.flags & ts.TypeFlags.Any)) {
+          return expandCheckerType(type, fieldName ?? "", typeMap, ctx)
+        }
+      }
+
+      return {}
     }
 
     default:
       return null
+  }
+}
+
+// ─── 프로그램 생성 ────────────────────────────────────────────────────────────
+
+function buildCompilerOptions(fromDir: string): ts.CompilerOptions {
+  const configPath = ts.findConfigFile(fromDir, ts.sys.fileExists, "tsconfig.json")
+  if (configPath) {
+    const { config, error } = ts.readConfigFile(configPath, ts.sys.readFile)
+    if (!error) {
+      const parsed = ts.parseJsonConfigFileContent(config, ts.sys, dirname(configPath))
+      return {
+        ...parsed.options,
+        noEmit: true,
+        skipLibCheck: true,
+        noUnusedLocals: false,
+        noUnusedParameters: false,
+      }
+    }
+  }
+  return {
+    target: ts.ScriptTarget.Latest,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    moduleResolution: (ts.ModuleResolutionKind as any).NodeJs ?? 2,
+    esModuleInterop: true,
+    allowSyntheticDefaultImports: true,
+    strict: false,
+    skipLibCheck: true,
+    noEmit: true,
   }
 }
 
@@ -259,21 +411,31 @@ function resolveImportPath(importPath: string, fromFile: string): string | null 
   return null
 }
 
-export function parseTypes(filePath: string): { typeMap: TypeMap; exportedNames: string[] } {
+// ─── 공개 API ────────────────────────────────────────────────────────────────
+
+export function parseTypes(filePath: string): {
+  typeMap: TypeMap
+  exportedNames: string[]
+  checker: ts.TypeChecker
+} {
   const typeMap: TypeMap        = new Map()
   const exportedNames: string[] = []
   const visited                 = new Set<string>()
   const absMainPath             = resolve(filePath)
 
+  const compilerOptions = buildCompilerOptions(dirname(absMainPath))
+  const program         = ts.createProgram([absMainPath], compilerOptions)
+  const checker         = program.getTypeChecker()
+
   function parseFile(currentPath: string): void {
     if (visited.has(currentPath)) return
     visited.add(currentPath)
 
-    let sourceText: string
-    try { sourceText = readFileSync(currentPath, "utf-8") } catch { return }
+    // program에 포함된 소스 파일 사용 (checker 연동을 위해 필수)
+    const sourceFile = program.getSourceFile(currentPath)
+      ?? ts.createSourceFile(currentPath, readFileSync(currentPath, "utf-8"), ts.ScriptTarget.Latest, true)
 
     const isMainFile = currentPath === absMainPath
-    const sourceFile = ts.createSourceFile(currentPath, sourceText, ts.ScriptTarget.Latest, true)
     const isExported = (n: ts.Declaration) =>
       (ts.getCombinedModifierFlags(n) & ts.ModifierFlags.Export) !== 0
 
@@ -287,7 +449,7 @@ export function parseTypes(filePath: string): { typeMap: TypeMap; exportedNames:
       if (!resolved) continue
       parseFile(resolved)
 
-      // import { Foo as Bar } 형태 alias 처리
+      // import { Foo as Bar } alias 처리
       const bindings = stmt.importClause?.namedBindings
       if (!bindings || !ts.isNamedImports(bindings)) continue
       for (const el of bindings.elements) {
@@ -317,26 +479,29 @@ export function parseTypes(filePath: string): { typeMap: TypeMap; exportedNames:
   }
 
   parseFile(absMainPath)
-  return { typeMap, exportedNames }
+  return { typeMap, exportedNames, checker }
 }
 
 export function toMock(
   typeName: string,
   typeMap: TypeMap,
+  checker?: ts.TypeChecker,
   overrides?: Record<string, unknown>,
 ): Record<string, unknown> {
   const entry = typeMap.get(typeName)
   if (!entry) throw new Error(`Type "${typeName}" not found`)
 
+  const ctx: Ctx | undefined = checker ? { checker, resolving: new Set() } : undefined
+
   let base: unknown
-  if (entry.kind === "interface") base = interfaceToMock(entry.node, typeMap)
+  if (entry.kind === "interface") base = interfaceToMock(entry.node, typeMap, ctx)
   else if (entry.kind === "enum") {
     const members    = [...entry.node.members]
     const picked     = faker.helpers.arrayElement(members)
     const memberName = ts.isIdentifier(picked.name) ? picked.name.text : String(members.indexOf(picked))
     base = new EnumRef(`${typeName}.${memberName}`)
   } else {
-    base = typeNodeToMock(entry.node, typeMap)
+    base = typeNodeToMock(entry.node, typeMap, undefined, ctx)
   }
 
   if (base instanceof EnumRef || typeof base !== "object" || base === null) return base as unknown as Record<string, unknown>
@@ -347,6 +512,7 @@ export function toMockList(
   typeName: string,
   typeMap: TypeMap,
   count = 3,
+  checker?: ts.TypeChecker,
 ): Record<string, unknown>[] {
-  return Array.from({ length: count }, () => toMock(typeName, typeMap))
+  return Array.from({ length: count }, () => toMock(typeName, typeMap, checker))
 }
