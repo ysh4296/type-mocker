@@ -1,21 +1,29 @@
 # ts-to-mock
 
-TypeScript 인터페이스 파일을 읽어 타입이 달린 mock 변수를 자동으로 생성하는 CLI 도구입니다.
+프로젝트 내 TypeScript 타입 파일을 전체 스캔해 `mocks` 객체 하나로 묶어 export하는 CLI 도구입니다.
 
 ```bash
-ts-to-mock src/types/user.ts
+ts-to-mock ./src -o ./src/mocks/index.ts
 ```
 
 ```ts
-export const mockUser: User = {
-  id: "a3f2c1d4-...",
-  name: "Alice Smith",
-  email: "alice@example.com",
-  age: 34,
-  role: UserRole.Editor,
-  isActive: true,
-  tags: ["lorem", "ipsum"],
-  createdAt: "2024-03-15T09:23:41.000Z"
+// src/mocks/index.ts (자동 생성)
+import { UserRole, type User, type Product, ... } from "../types/api"
+
+export const mocks = {
+  UserMock: {
+    id: "a3f2c1d4-...",
+    name: "Alice Smith",
+    email: "alice@example.com",
+    role: UserRole.Admin,
+    ...
+  } as User,
+  ProductMock: {
+    title: "lorem ipsum",
+    price: 42,
+    ...
+  } as Product,
+  ...
 }
 ```
 
@@ -23,36 +31,18 @@ export const mockUser: User = {
 
 ## 설치 및 실행
 
-### npm / git URL로 설치한 경우
-
-```bash
-npx ts-to-mock src/types/user.ts
-npm exec ts-to-mock -- src/types/user.ts
-```
-
 ### 로컬 개발 중 (빌드 없이)
 
 ```bash
 npm install
-npm run cli -- src/types/user.ts
+npm run cli -- ./src -o ./src/mocks/index.ts
 ```
 
-### 빌드 후 직접 실행
+### npm link (전역 등록)
 
 ```bash
-npm run build          # dist/cli.js 생성
-node dist/cli.js src/types/user.ts
-npx . src/types/user.ts
-```
-
-### npm link (선택사항)
-
-시스템 전역에 `ts-to-mock` 명령어를 등록하고 싶다면:
-
-```bash
-npm run build
 npm link
-ts-to-mock src/types/user.ts
+ts-to-mock ./src -o ./src/mocks/index.ts
 ```
 
 ---
@@ -60,78 +50,69 @@ ts-to-mock src/types/user.ts
 ## 사용법
 
 ```bash
-ts-to-mock <ts-file> [options]
+ts-to-mock <dir> [options]
 ```
+
+### 인수
+
+| 인수 | 설명 |
+|---|---|
+| `<dir>` | 스캔할 프로젝트 루트 디렉터리 (필수) |
 
 ### 옵션
 
 | 옵션 | 설명 | 기본값 |
 |---|---|---|
-| `-n, --count <n>` | 생성 개수 | `1` |
-| `-o, --out <file>` | 파일로 저장 (기본: stdout) | - |
-| `-s, --schema <name>` | 특정 타입 지정 (기본: 파일 내 전체) | - |
+| `-o, --out <file>` | 출력 파일 경로 (미지정 시 stdout) | - |
+| `-e, --exclude <dirs...>` | 추가로 제외할 디렉터리명 | - |
+
+`node_modules`, `dist`, `build`, `.git`, `coverage`, `.next`, `.nuxt`는 기본으로 제외됩니다.
 
 ---
 
 ## 예시
 
-### 기본 — stdout 출력
+### stdout 출력
 
 ```bash
-ts-to-mock src/types/user.ts
-```
-
-### 여러 개 생성
-
-```bash
-ts-to-mock src/types/user.ts -n 5
-```
-
-```ts
-export const mockUsers: User[] = [
-  { id: "...", name: "Alice Smith", ... },
-  { id: "...", name: "Bob Jones",   ... },
-  ...
-]
+ts-to-mock ./src
 ```
 
 ### 파일로 저장
 
 ```bash
-ts-to-mock src/types/user.ts -o src/mocks/mockUser.ts
+ts-to-mock ./src -o ./src/mocks/index.ts
 ```
 
-저장 시 타입 import가 자동으로 추가됩니다. enum은 값으로 사용되므로 `type` 없이, 나머지는 `type`으로 임포트됩니다:
+### 추가 디렉터리 제외
+
+```bash
+ts-to-mock ./src -o ./src/mocks/index.ts -e __tests__ fixtures
+```
+
+---
+
+## 출력 형식
+
+모든 타입의 mock이 `mocks` 객체 하나에 담깁니다.  
+키 이름은 `TypeNameMock` (접미사) 형식입니다.
 
 ```ts
-// src/mocks/mockUser.ts (자동 생성)
-import { UserRole, type User } from "../types/user"
-
-export const mockUser: User = {
-  ...
+export const mocks = {
+  UserMock:    { ... } as User,
+  ProductMock: { ... } as Product,
+  UserRoleMock: UserRole.Admin as UserRole,   // enum
 }
 ```
 
-### 파일에 타입이 여러 개인 경우
+타입 단언은 TypeScript 컴파일러로 검증 후 결정됩니다.
+- 대부분 `as TypeName`
+- 내장 라이브러리 타입의 심볼 프로퍼티(`[Symbol.toStringTag]` 등) 문제가 있는 경우만 `as unknown as TypeName`
+
+파일 저장 시 import가 자동 생성됩니다. enum은 런타임 값이 필요하므로 `type` 없이, 나머지는 `type`으로 임포트됩니다:
 
 ```ts
-// src/types/order.ts
-export interface OrderItem { ... }
-export interface Order { ... }
-```
-
-```bash
-# 전체 타입 한 번에 생성
-ts-to-mock src/types/order.ts
-
-# 특정 타입만 지정
-ts-to-mock src/types/order.ts --schema Order
-```
-
-### 조합 예시
-
-```bash
-ts-to-mock src/types/order.ts --schema Order -n 3 -o src/mocks/mockOrder.ts
+import { UserRole, type User, type Product } from "../types/api"
 ```
 
 ---
@@ -143,10 +124,7 @@ src/
   cli/index.ts          CLI 진입점
   core/ast-to-mock.ts   mock 생성 코어 (TypeScript AST + faker)
   types/                예시 TypeScript 타입 파일
-    user.ts
-    product.ts
-    order.ts
-  mocks/                생성된 mock 파일 (--out 옵션 사용 시)
+  mocks/index.ts        생성된 mock 파일 (-o 옵션 사용 시)
 ```
 
 ---
@@ -154,36 +132,34 @@ src/
 ## 동작 원리
 
 ```
-TypeScript 파일
-  → ts.createProgram()   전체 프로그램 빌드 (tsconfig.json 자동 탐색)
-  → TypeChecker          import 체인 + node_modules 타입까지 완전 해석
-  → faker                필드 타입에 맞는 랜덤 데이터 생성
-  → export const mockXxx: Xxx = { ... }
+디렉터리 스캔
+  → .ts / .tsx 파일 수집 (테스트·스토리 파일 제외)
+  → ts.createProgram()     전체 프로그램 빌드 (tsconfig.json 자동 탐색)
+  → TypeChecker            TypeReference는 선언 컨텍스트 기반으로 해석
+  → faker                  필드 타입 및 이름에 맞는 랜덤 데이터 생성
+  → 1차: as TypeName 생성 후 컴파일러 검증
+  → 실패한 타입만 as unknown as TypeName으로 교체
+  → export const mocks = { TypeNameMock: {...} as TypeName, ... }
 ```
-
-프로젝트 루트의 `tsconfig.json`을 자동으로 탐색해 컴파일 옵션을 그대로 사용합니다.
 
 ### 타입 해석 흐름
 
-로컬 타입은 AST 기반으로 빠르게 처리하고, 외부 타입은 TypeChecker를 통해 재귀적으로 전개합니다.
-
 ```
 TypeReference 만날 때
-  ├─ 로컬 typeMap에 있음  → AST 기반 즉시 전개 (빠름)
-  └─ 없음
-      ├─ checker.getSymbolAtLocation()  → Declaration 탐색
-      │    ├─ InterfaceDeclaration  → 프로퍼티 전개
-      │    ├─ TypeAliasDeclaration  → 타입 노드 재귀 전개
-      │    ├─ EnumDeclaration       → 멤버 중 랜덤 선택
-      │    └─ ClassDeclaration      → 프로퍼티 전개
-      └─ checker.getTypeAtLocation()  → 타입 시스템 레벨 전개
+  ├─ 내장 유틸리티 (Partial, Pick, Omit, Promise ...)  → 직접 처리
+  ├─ TypeChecker로 선언 탐색 (컨텍스트 정확도 우선)
+  │    ├─ InterfaceDeclaration  → 프로퍼티 전개
+  │    ├─ TypeAliasDeclaration  → 타입 노드 재귀 전개
+  │    ├─ EnumDeclaration       → 멤버 중 랜덤 선택
+  │    └─ ClassDeclaration      → 프로퍼티 전개
+  └─ typeMap fallback (TypeChecker 실패 시)
 ```
+
+여러 파일에 같은 타입명이 존재할 경우, 알파벳 순서상 먼저 처리된 파일의 정의를 사용합니다.
 
 ---
 
 ## 지원 범위
-
-### 타입
 
 | 항목 | 지원 여부 |
 |---|---|
@@ -191,43 +167,19 @@ TypeReference 만날 때
 | `union`, `intersection`, `tuple` | ✓ |
 | `Partial` / `Required` / `Readonly` / `Pick` / `Omit` / `Promise` / `Array<T>` | ✓ |
 | `interface extends` 상속 필드 | ✓ |
-| 상대경로 import (`./`, `../`) 타입 | ✓ 재귀 추적 |
+| 프로젝트 내 모든 파일 자동 탐색 | ✓ |
 | node_modules 외부 패키지 타입 | ✓ TypeChecker로 추적 |
-| `A.B` 형태 네임스페이스 타입 (`WebAssembly.Memory` 등) | ✓ TypeChecker로 추적 |
+| `A.B` 네임스페이스 타입 (`WebAssembly.Memory` 등) | ✓ TypeChecker로 추적 |
+| 함수 타입 필드 (`() => void` 등) | ✓ `() => {}` 스텁 생성 |
+| 인터페이스 메서드 시그니처 | ✓ `() => {}` 스텁 생성 |
 | 순환 참조 타입 | ✓ 자동 차단 (depth limit 6) |
-| 함수 타입 필드 | △ 생략됨 |
-| `Extract`, `Exclude`, `ReturnType`, `Parameters` 등 고급 유틸리티 | △ `{}` 로 생성됨 |
+| `Extract`, `Exclude`, `ReturnType` 등 고급 유틸리티 | △ `{}` 로 생성됨 |
 
-### node_modules 타입 예시
+---
 
-```ts
-// src/types/memory.ts
-export interface GameState {
-  memory: WebAssembly.Memory   // node_modules 내장 전역 타입
-  buffer: ArrayBuffer
-}
-```
+## 필드명 기반 데이터 생성
 
-```bash
-ts-to-mock src/types/memory.ts
-```
-
-```ts
-export const mockGameState: GameState = {
-  memory: {
-    buffer: {
-      byteLength: 57
-    }
-  },
-  buffer: {
-    byteLength: 83
-  }
-}
-```
-
-### 필드명 기반 데이터 생성
-
-필드명을 인식해 의미있는 값을 생성합니다:
+필드명을 인식해 의미 있는 값을 생성합니다:
 
 | 패턴 | 예시 필드명 | 생성 값 |
 |---|---|---|
@@ -244,22 +196,16 @@ export const mockGameState: GameState = {
 
 ## 주의사항
 
-**함수 타입 필드는 생성 결과에서 생략됩니다.**
+**옵셔널 필드(`?`)는 약 30% 확률로 생략됩니다.**
+
+실행마다 결과가 달라지므로, 특정 필드가 반드시 필요하면 생성 후 직접 지정합니다.
 
 ```ts
-export interface Ctx {
-  onClick: (e: MouseEvent) => void   // → 생성된 파일에 이 필드 없음
-}
-```
+import { mocks } from "./mocks"
 
-생성 후 수동으로 `jest.fn()` 등을 채워야 합니다.
+const user = { ...mocks.UserMock, id: "fixed-id" }
+```
 
 ---
 
 **`Extract`, `Exclude`, `ReturnType`, `Parameters` 등 고급 유틸리티 타입은 `{}` 로 생성됩니다.**
-
----
-
-**옵셔널 필드(`?`)는 약 30% 확률로 생략됩니다.**
-
-실행마다 결과가 달라지므로, 특정 필드가 반드시 필요하면 생성 후 직접 추가합니다.
