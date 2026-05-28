@@ -3,12 +3,9 @@
     "target": "ESNext",
     "module": "ESNext",
     "moduleResolution": "bundler",
-    "allowImportingTsExtensions": true,
+    "allowSyntheticDefaultImports": true,
     "noEmit": true,
     "strict": false,
-    "skipLibCheck": true,
-    "paths": {
-      "ts-to-mock": ["../src/index.ts"]
-    }
+    "skipLibCheck": true
   }
 }

@@ -3,15 +3,18 @@
   "version": "0.0.1",
   "type": "module",
   "scripts": {
-    "build": "node ../node_modules/.bin/tsx build.ts",
-    "start": "open index.html"
+    "build": "node ../node_modules/tsx/dist/cli.mjs build.ts",
+    "start": "start index.html"
+  },
+  "dependencies": {
+    "unplugin-ts-mock": "^0.1.0"
   },
   "devDependencies": {
+    "@types/node": "^20.0.0",
     "rollup": "^4.0.0",
     "rollup-plugin-esbuild": "^6.0.0",
     "@rollup/plugin-node-resolve": "^15.0.0",
-    "@rollup/plugin-alias": "^5.0.0",
     "esbuild": "^0.28.0",
-    "@esbuild/darwin-arm64": "^0.28.0"
+    "@esbuild/win32-x64": "^0.28.0"
   }
 }

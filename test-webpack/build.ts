@@ -1,7 +1,7 @@
 import { resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 import webpack from "webpack"
-import { webpack as tsMock } from "../src/plugin/index.ts"
+import TsMock from "unplugin-ts-mock/webpack"
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url))
 
@@ -16,9 +16,6 @@ const compiler = webpack({
   },
   resolve: {
     extensions: [".ts", ".js"],
-    alias: {
-      "ts-to-mock": resolve(__dirname, "../src/index.ts"),
-    },
   },
   module: {
     rules: [
@@ -29,7 +26,7 @@ const compiler = webpack({
       },
     ],
   },
-  plugins: [tsMock({ dir: resolve(__dirname, "src") })],
+  plugins: [TsMock({ dir: resolve(__dirname, "src") })],
 })
 
 compiler.run((err, stats) => {

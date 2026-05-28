@@ -212,21 +212,28 @@ export function parseTypesFromProject(
     if (!sourceFile) continue
 
     const exportedNames: string[] = []
+    // .d.ts files and script files (no import/export → TypeScript treats all
+    // top-level declarations as globally available, same as ambient .d.ts)
+    const isDts      = sourceFile.isDeclarationFile
+    const isScript   = !sourceFile.statements.some(
+      s => ts.isImportDeclaration(s) || ts.isExportDeclaration(s) || ts.isExportAssignment(s)
+    )
+    const includeAll = isDts || isScript
 
     function visit(node: ts.Node): void {
       if (ts.isInterfaceDeclaration(node)) {
         // First-write-wins: when two files export the same name, keep the first
         if (!typeMap.has(node.name.text))
           typeMap.set(node.name.text, { kind: "interface", node })
-        if (isExported(node)) exportedNames.push(node.name.text)
+        if (includeAll || isExported(node)) exportedNames.push(node.name.text)
       } else if (ts.isTypeAliasDeclaration(node)) {
         if (!typeMap.has(node.name.text))
           typeMap.set(node.name.text, { kind: "type", node: node.type })
-        if (isExported(node)) exportedNames.push(node.name.text)
+        if (includeAll || isExported(node)) exportedNames.push(node.name.text)
       } else if (ts.isEnumDeclaration(node)) {
         if (!typeMap.has(node.name.text))
           typeMap.set(node.name.text, { kind: "enum", node })
-        if (isExported(node)) exportedNames.push(node.name.text)
+        if (includeAll || isExported(node)) exportedNames.push(node.name.text)
       }
       ts.forEachChild(node, visit)
     }

@@ -3,7 +3,6 @@ import { defineConfig } from "tsup"
 const external = [
   "typescript",
   "@faker-js/faker",
-  "unplugin",
   "vite",
   "rollup",
   "webpack",

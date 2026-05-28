@@ -1,10 +1,11 @@
 import { describe, it, expect } from "vitest"
 import { resolve } from "node:path"
-import { parseTypes } from "../project-scanner"
+import { parseTypes, parseTypesFromProject } from "../project-scanner"
 import { toMock, toMockList } from "../mock-generator"
 import { EnumRef } from "../types"
 
-const FIXTURES = resolve(__dirname, "fixtures/types.ts")
+const FIXTURES     = resolve(__dirname, "fixtures/types.ts")
+const FIXTURES_DIR = resolve(__dirname, "fixtures")
 
 describe("toMock", () => {
   describe("interface types", () => {
@@ -80,6 +81,51 @@ describe("toMock", () => {
       const { typeMap, checker } = parseTypes(FIXTURES)
       expect(() => toMock("NonExistentType", typeMap, checker)).toThrow(/not found/)
     })
+  })
+})
+
+describe("script file types (no import/export)", () => {
+  it("resolves an interface from a script file without export", () => {
+    const { typeMap, checker } = parseTypesFromProject(FIXTURES_DIR)
+    const user = toMock("ScriptUser", typeMap, checker)
+    expect(typeof user.id).toBe("string")
+    expect(typeof user.name).toBe("string")
+    expect(typeof user.score).toBe("number")
+  })
+
+  it("resolves a type alias from a script file without export", () => {
+    const { typeMap, checker } = parseTypesFromProject(FIXTURES_DIR)
+    const page = toMock("ScriptPaginated", typeMap, checker)
+    expect(Array.isArray(page.items)).toBe(true)
+    expect(typeof page.total).toBe("number")
+  })
+})
+
+describe("global ambient types (.d.ts)", () => {
+  it("resolves a declare interface without export keyword", () => {
+    const { typeMap, checker } = parseTypesFromProject(FIXTURES_DIR)
+    const user = toMock("GlobalUser", typeMap, checker)
+    expect(typeof user.id).toBe("string")
+    expect(typeof user.name).toBe("string")
+    expect(typeof user.score).toBe("number")
+  })
+
+  it("resolves a declare type alias without export keyword", () => {
+    const { typeMap, checker } = parseTypesFromProject(FIXTURES_DIR)
+    const page = toMock("GlobalPaginated", typeMap, checker)
+    expect(Array.isArray(page.items)).toBe(true)
+    expect(typeof page.total).toBe("number")
+    expect(typeof page.page).toBe("number")
+  })
+
+  it("resolves nested global types", () => {
+    const { typeMap, checker } = parseTypesFromProject(FIXTURES_DIR)
+    const nested = toMock("GlobalNested", typeMap, checker)
+    expect(typeof nested.label).toBe("string")
+    expect(typeof nested.active).toBe("boolean")
+    const user = nested.user as Record<string, unknown>
+    expect(typeof user.id).toBe("string")
+    expect(typeof user.name).toBe("string")
   })
 })
 

@@ -1,4 +1,4 @@
-import { createMock, createMockList } from "ts-to-mock"
+import { createMock, createMockList } from "unplugin-ts-mock"
 import type { User, Post, PaginatedUsers } from "./types"
 
 function render() {

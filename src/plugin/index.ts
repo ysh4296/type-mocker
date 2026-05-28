@@ -17,8 +17,13 @@ const tsMockPlugin = createUnplugin((options: TsMockOptions = {}) => {
   let resolvedRoot = process.cwd()
 
   function scan() {
-    const dir = resolve(options.dir ?? resolvedRoot)
-    state = parseTypesFromProject(dir, { excludeDirs: options.exclude })
+    try {
+      const dir = resolve(options.dir ?? resolvedRoot)
+      state = parseTypesFromProject(dir, { excludeDirs: options.exclude })
+    } catch (err) {
+      console.error(`[unplugin-ts-mock] scan failed: ${err instanceof Error ? err.message : String(err)}`)
+      state = null
+    }
   }
 
   return {
@@ -32,13 +37,21 @@ const tsMockPlugin = createUnplugin((options: TsMockOptions = {}) => {
     },
 
     transformInclude(id: string) {
-      return /\.[jt]sx?$/.test(id)
+      if (id.includes("mockData")) console.log(`[unplugin-ts-mock] transformInclude: ${id}`)
+      const path = id.split("?")[0]
+      return /\.[jt]sx?$/.test(path)
     },
 
     transform(code: string, id: string) {
-      if (!state) return null
+      if (id.includes("mockData")) console.log(`[unplugin-ts-mock] transform: ${id} | has<: ${code.includes("createMock<")}`)
       if (!code.includes("ts-to-mock")) return null
       if (!code.includes("createMock")) return null
+      if (!state) scan()
+      if (!state) return null
+      if (!code.includes("createMock<")) {
+        console.warn(`[unplugin-ts-mock] ${id}\n  ↳ createMock() found but generic was already stripped — ensure the plugin runs before SWC/TypeScript compilation`)
+        return null
+      }
 
       const { typeMap, fileTypeMap, checker } = state
       const enumsNeeded = new Set<string>()
@@ -46,6 +59,11 @@ const tsMockPlugin = createUnplugin((options: TsMockOptions = {}) => {
 
       // String ranges are recomputed before each replace pass because prior
       // substitutions shift all subsequent character offsets.
+
+      const warn = (typeName: string, err: unknown) => {
+        const reason = err instanceof Error ? err.message : String(err)
+        console.warn(`[unplugin-ts-mock] ${id}\n  ↳ createMock<${typeName}>() — ${reason}`)
+      }
 
       // Replace createMock<TypeName>()
       let ranges = getStringRanges(transformed)
@@ -57,7 +75,8 @@ const tsMockPlugin = createUnplugin((options: TsMockOptions = {}) => {
             const mock = toMock(typeName, typeMap, checker)
             collectEnumNames(mock, enumsNeeded)
             return serialize(mock, 0)
-          } catch {
+          } catch (err) {
+            warn(typeName, err)
             return originalMatch
           }
         },
@@ -74,7 +93,8 @@ const tsMockPlugin = createUnplugin((options: TsMockOptions = {}) => {
             const mocks = Array.from({ length: count }, () => toMock(typeName, typeMap, checker))
             mocks.forEach(m => collectEnumNames(m, enumsNeeded))
             return serialize(mocks, 0)
-          } catch {
+          } catch (err) {
+            warn(typeName, err)
             return originalMatch
           }
         },
@@ -103,6 +123,27 @@ const tsMockPlugin = createUnplugin((options: TsMockOptions = {}) => {
         scan()
         server.ws.send({ type: "full-reload" })
       },
+    },
+
+    // webpack-specific: propagate transform rules to child compilers (Next.js SSR uses child compilers)
+    webpack(compiler: any) {
+      compiler.hooks.thisCompilation.tap("ts-to-mock", (compilation: any) => {
+        compilation.hooks.childCompiler?.tap("ts-to-mock", (childCompiler: any) => {
+          if (!state) scan()
+          // Copy rules with function `use` (unplugin's pattern) from parent to child
+          const parentRules: any[] = compiler.options?.module?.rules ?? []
+          const loaderRules = parentRules.filter((r: any) => typeof r.use === "function")
+          if (!loaderRules.length || !childCompiler.options?.module) return
+          childCompiler.options.module.rules ??= []
+          loaderRules.forEach((rule: any) => {
+            if (!childCompiler.options.module.rules.includes(rule))
+              childCompiler.options.module.rules.unshift(rule)
+          })
+          // Propagate $unpluginContext so the loader can find the plugin
+          if (!childCompiler.$unpluginContext)
+            childCompiler.$unpluginContext = compiler.$unpluginContext ?? {}
+        })
+      })
     },
   }
 })

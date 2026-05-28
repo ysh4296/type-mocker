@@ -3,18 +3,14 @@ import { fileURLToPath } from "node:url"
 import { rollup } from "rollup"
 import esbuild from "rollup-plugin-esbuild"
 import nodeResolve from "@rollup/plugin-node-resolve"
-import alias from "@rollup/plugin-alias"
-import { rollup as tsMock } from "../src/plugin/index.ts"
+import TsMock from "unplugin-ts-mock/rollup"
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url))
 
 const bundle = await rollup({
   input: resolve(__dirname, "src/main.ts"),
   plugins: [
-    alias({
-      entries: [{ find: "ts-to-mock", replacement: resolve(__dirname, "../src/index.ts") }],
-    }),
-    tsMock({ dir: resolve(__dirname, "src") }),
+    TsMock({ dir: resolve(__dirname, "src") }),
     esbuild({ target: "esnext" }),
     nodeResolve(),
   ],

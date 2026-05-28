@@ -3,12 +3,16 @@
   "version": "0.0.1",
   "type": "module",
   "scripts": {
-    "build": "node ../node_modules/.bin/tsx build.ts",
-    "start": "open index.html"
+    "build": "node ../node_modules/tsx/dist/cli.mjs build.ts",
+    "start": "start index.html"
+  },
+  "dependencies": {
+    "unplugin-ts-mock": "^0.1.0"
   },
   "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.3.0",
     "webpack": "^5.99.0",
-    "ts-loader": "^9.5.0",
-    "typescript": "^5.3.0"
+    "ts-loader": "^9.5.0"
   }
 }
