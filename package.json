@@ -1,6 +1,6 @@
 {
   "name": "unplugin-ts-mock",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "description": "Build-time TypeScript type → faker mock generator for Vite, Rollup, webpack, and esbuild",
   "type": "module",
   "main": "./dist/index.cjs",
