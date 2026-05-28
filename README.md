@@ -1,131 +1,238 @@
 # ts-to-mock
 
-프로젝트 내 TypeScript 타입 파일을 전체 스캔해 `mocks` 객체 하나로 묶어 export하는 CLI 도구입니다.
+TypeScript 타입을 스캔해 faker 기반 mock 데이터를 자동 생성하는 도구입니다.
+
+두 가지 방식으로 사용할 수 있습니다.
+
+| 방식 | 적합한 환경 |
+|---|---|
+| **번들러 플러그인** | Vite / webpack / Rollup / esbuild 프로젝트 |
+| **CLI** | 번들러 없는 Node.js 프로젝트, 파일 생성이 필요한 경우 |
+
+---
+
+## 데모 실행
 
 ```bash
-ts-to-mock ./src -o ./src/mocks/index.ts
+# Node.js 20+ 필요 (nvm use 20)
+cd test-project
+npm install
+npm run dev   # http://localhost:5173
 ```
 
-```ts
-// src/mocks/index.ts (자동 생성)
-import { UserRole, type User, type Product, ... } from "../types/api"
+`createMock<User>()` 등으로 생성된 mock 데이터가 카드 형식으로 표시됩니다.  
+**새 데이터 생성** 버튼을 누르면 faker가 새 값을 만들어냅니다.
 
-export const mocks = {
-  UserMock: {
-    id: "a3f2c1d4-...",
-    name: "Alice Smith",
-    email: "alice@example.com",
-    role: UserRole.Admin,
-    ...
-  } as User,
-  ProductMock: {
-    title: "lorem ipsum",
-    price: 42,
-    ...
-  } as Product,
+---
+
+## 번들러 플러그인
+
+코드에 `createMock<T>()`를 작성하면 빌드 시점에 객체 리터럴로 교체됩니다.  
+런타임 오버헤드 없이 타입 추론과 자동완성이 그대로 동작합니다.
+
+### 설치
+
+```bash
+npm install ts-to-mock
+```
+
+### 플러그인 등록
+
+```ts
+// vite.config.ts
+import tsMock from 'ts-to-mock/vite'
+
+export default {
+  plugins: [tsMock()]
+}
+```
+
+```js
+// webpack.config.js
+const tsMock = require('ts-to-mock/webpack')
+
+module.exports = {
+  plugins: [new tsMock()]
+}
+```
+
+```js
+// rollup.config.js
+import tsMock from 'ts-to-mock/rollup'
+
+export default {
+  plugins: [tsMock()]
+}
+```
+
+```js
+// esbuild
+import tsMock from 'ts-to-mock/esbuild'
+
+await build({
+  plugins: [tsMock()]
+})
+```
+
+### 사용
+
+```ts
+import { createMock, createMockList } from 'ts-to-mock'
+import type { User, Post } from './types'
+
+const user  = createMock<User>()   // User 타입으로 추론됨
+const post  = createMock<Post>()
+const users = createMockList<User>(3)  // User[] 타입
+```
+
+빌드 후 실제 번들에 들어가는 코드:
+
+```ts
+const user = {
+  id: "f3152fb1-...",
+  name: "Lola Friesen",
+  email: "lola@example.com",
+  role: Role.Admin,
+  createdAt: "2024-01-15T09:23:00.000Z",
   ...
 }
 ```
 
+`createMock<T>()` 호출 자체가 사라지고 객체가 인라인으로 들어갑니다.
+
+### 플러그인 옵션
+
+```ts
+tsMock({
+  dir:     './src',        // 스캔 디렉터리 (기본값: 프로젝트 루트)
+  exclude: ['fixtures'],   // 추가로 제외할 디렉터리명
+})
+```
+
 ---
 
-## 설치 및 실행
+## CLI
 
-### 로컬 개발 중 (빌드 없이)
+프로젝트를 스캔해 모든 타입의 mock을 파일로 생성합니다.
+
+### 로컬 개발
 
 ```bash
 npm install
 npm run cli -- ./src -o ./src/mocks/index.ts
 ```
 
-### npm link (전역 등록)
+### 전역 설치
 
 ```bash
 npm link
 ts-to-mock ./src -o ./src/mocks/index.ts
 ```
 
----
-
-## 사용법
+### 사용법
 
 ```bash
 ts-to-mock <dir> [options]
 ```
 
-### 인수
-
-| 인수 | 설명 |
-|---|---|
-| `<dir>` | 스캔할 프로젝트 루트 디렉터리 (필수) |
-
-### 옵션
-
-| 옵션 | 설명 | 기본값 |
+| 인수 / 옵션 | 설명 | 기본값 |
 |---|---|---|
-| `-o, --out <file>` | 출력 파일 경로 (미지정 시 stdout) | - |
-| `-e, --exclude <dirs...>` | 추가로 제외할 디렉터리명 | - |
+| `<dir>` | 스캔할 디렉터리 (필수) | — |
+| `-o, --out <file>` | 출력 파일 경로 | stdout |
+| `-e, --exclude <dirs...>` | 추가로 제외할 디렉터리명 | — |
 
-`node_modules`, `dist`, `build`, `.git`, `coverage`, `.next`, `.nuxt`는 기본으로 제외됩니다.
+`node_modules`, `dist`, `build`, `.git`, `coverage`, `.next`, `.nuxt`는 기본 제외됩니다.
 
----
-
-## 예시
-
-### stdout 출력
+### 예시
 
 ```bash
+# stdout 출력
 ts-to-mock ./src
-```
 
-### 파일로 저장
-
-```bash
+# 파일로 저장
 ts-to-mock ./src -o ./src/mocks/index.ts
-```
 
-### 추가 디렉터리 제외
-
-```bash
+# 특정 디렉터리 추가 제외
 ts-to-mock ./src -o ./src/mocks/index.ts -e __tests__ fixtures
 ```
 
----
-
-## 출력 형식
-
-모든 타입의 mock이 `mocks` 객체 하나에 담깁니다.  
-키 이름은 `TypeNameMock` (접미사) 형식입니다.
+### 생성 파일 예시
 
 ```ts
+// src/mocks/index.ts (자동 생성)
+import { Role, type User, type Post } from "../types"
+
 export const mocks = {
-  UserMock:    { ... } as User,
-  ProductMock: { ... } as Product,
-  UserRoleMock: UserRole.Admin as UserRole,   // enum
+  UserMock: {
+    id: "a3f2c1d4-...",
+    name: "Alice Smith",
+    email: "alice@example.com",
+    role: Role.Admin,
+    createdAt: "2024-01-15T09:23:00.000Z",
+  } as User,
+  PostMock: {
+    id: "b2e1f3a5-...",
+    title: "lorem ipsum dolor",
+    published: true,
+    ...
+  } as Post,
 }
 ```
 
-타입 단언은 TypeScript 컴파일러로 검증 후 결정됩니다.
-- 대부분 `as TypeName`
-- 내장 라이브러리 타입의 심볼 프로퍼티(`[Symbol.toStringTag]` 등) 문제가 있는 경우만 `as unknown as TypeName`
-
-파일 저장 시 import가 자동 생성됩니다. enum은 런타임 값이 필요하므로 `type` 없이, 나머지는 `type`으로 임포트됩니다:
+### 활용
 
 ```ts
-import { UserRole, type User, type Product } from "../types/api"
+import { mocks } from './mocks'
+
+// 그대로 사용
+const user = mocks.UserMock
+
+// 특정 필드 오버라이드
+const user = { ...mocks.UserMock, id: 'fixed-id' }
 ```
 
 ---
 
-## 프로젝트 구조
+## 지원 타입
 
-```
-src/
-  cli/index.ts          CLI 진입점
-  core/ast-to-mock.ts   mock 생성 코어 (TypeScript AST + faker)
-  types/                예시 TypeScript 타입 파일
-  mocks/index.ts        생성된 mock 파일 (-o 옵션 사용 시)
-```
+| 항목 | 지원 여부 |
+|---|---|
+| `interface`, `type alias`, `enum` | ✓ |
+| `union`, `intersection`, `tuple` | ✓ |
+| `Partial` / `Required` / `Readonly` / `Pick` / `Omit` / `Promise` / `Array<T>` | ✓ |
+| `interface extends` 상속 | ✓ |
+| 프로젝트 내 모든 파일 자동 탐색 | ✓ |
+| node_modules 외부 패키지 타입 | ✓ TypeChecker로 추적 |
+| `A.B` 네임스페이스 타입 (`WebAssembly.Memory` 등) | ✓ TypeChecker로 추적 |
+| 함수 타입 / 메서드 시그니처 | ✓ `() => {}` 스텁 생성 |
+| 순환 참조 | ✓ 자동 차단 (depth limit 6) |
+| `Extract`, `Exclude`, `ReturnType` 등 고급 유틸리티 | △ `{}` 로 생성됨 |
+
+---
+
+## 필드명 기반 데이터 생성
+
+필드명을 인식해 의미 있는 값을 생성합니다.
+
+| 패턴 | 예시 필드명 | 생성 값 |
+|---|---|---|
+| 정확히 일치 | `id` | UUID |
+| 정확히 일치 | `name`, `email`, `phone`, `company` | faker 대응값 |
+| 정확히 일치 | `timezone`, `locale`, `slug`, `ip`, `mimeType` | 대응값 |
+| `*Id` 접미사 | `userId`, `teamId` | UUID |
+| `*At` 접미사 | `createdAt`, `updatedAt` | ISO 날짜 문자열 |
+| `*Date` 접미사 | `startDate`, `dueDate` | ISO 날짜 문자열 |
+| `*Url` 접미사 | `avatarUrl`, `imageUrl` | URL |
+| 그 외 `string` | — | lorem ipsum 단어 |
+
+---
+
+## 주의사항
+
+**옵셔널 필드(`?`)는 약 30% 확률로 생략됩니다.**  
+실행마다 결과가 달라지므로, 반드시 필요한 필드는 생성 후 직접 지정합니다.
+
+**`Extract`, `Exclude`, `ReturnType`, `Parameters` 등 고급 유틸리티 타입은 `{}` 로 생성됩니다.**
 
 ---
 
@@ -134,78 +241,18 @@ src/
 ```
 디렉터리 스캔
   → .ts / .tsx 파일 수집 (테스트·스토리 파일 제외)
-  → ts.createProgram()     전체 프로그램 빌드 (tsconfig.json 자동 탐색)
-  → TypeChecker            TypeReference는 선언 컨텍스트 기반으로 해석
-  → faker                  필드 타입 및 이름에 맞는 랜덤 데이터 생성
+  → ts.createProgram()   전체 프로그램 빌드 (tsconfig.json 자동 탐색)
+  → TypeChecker          TypeReference를 선언 컨텍스트 기반으로 해석
+  → faker                필드 타입 및 이름에 맞는 랜덤 데이터 생성
+
+[CLI]
   → 1차: as TypeName 생성 후 컴파일러 검증
   → 실패한 타입만 as unknown as TypeName으로 교체
   → export const mocks = { TypeNameMock: {...} as TypeName, ... }
+
+[플러그인]
+  → createMock<T>() 패턴을 정규식으로 탐지
+  → 제네릭 인자 T를 추출해 mock 생성
+  → 객체 리터럴로 인라인 교체
+  → enum import 자동 주입
 ```
-
-### 타입 해석 흐름
-
-```
-TypeReference 만날 때
-  ├─ 내장 유틸리티 (Partial, Pick, Omit, Promise ...)  → 직접 처리
-  ├─ TypeChecker로 선언 탐색 (컨텍스트 정확도 우선)
-  │    ├─ InterfaceDeclaration  → 프로퍼티 전개
-  │    ├─ TypeAliasDeclaration  → 타입 노드 재귀 전개
-  │    ├─ EnumDeclaration       → 멤버 중 랜덤 선택
-  │    └─ ClassDeclaration      → 프로퍼티 전개
-  └─ typeMap fallback (TypeChecker 실패 시)
-```
-
-여러 파일에 같은 타입명이 존재할 경우, 알파벳 순서상 먼저 처리된 파일의 정의를 사용합니다.
-
----
-
-## 지원 범위
-
-| 항목 | 지원 여부 |
-|---|---|
-| `interface`, `type alias`, `enum` | ✓ |
-| `union`, `intersection`, `tuple` | ✓ |
-| `Partial` / `Required` / `Readonly` / `Pick` / `Omit` / `Promise` / `Array<T>` | ✓ |
-| `interface extends` 상속 필드 | ✓ |
-| 프로젝트 내 모든 파일 자동 탐색 | ✓ |
-| node_modules 외부 패키지 타입 | ✓ TypeChecker로 추적 |
-| `A.B` 네임스페이스 타입 (`WebAssembly.Memory` 등) | ✓ TypeChecker로 추적 |
-| 함수 타입 필드 (`() => void` 등) | ✓ `() => {}` 스텁 생성 |
-| 인터페이스 메서드 시그니처 | ✓ `() => {}` 스텁 생성 |
-| 순환 참조 타입 | ✓ 자동 차단 (depth limit 6) |
-| `Extract`, `Exclude`, `ReturnType` 등 고급 유틸리티 | △ `{}` 로 생성됨 |
-
----
-
-## 필드명 기반 데이터 생성
-
-필드명을 인식해 의미 있는 값을 생성합니다:
-
-| 패턴 | 예시 필드명 | 생성 값 |
-|---|---|---|
-| 정확히 일치 | `name`, `email`, `company`, `phone` | faker 대응값 |
-| 정확히 일치 | `id` | UUID |
-| 정확히 일치 | `timezone`, `locale`, `slug`, `ip`, `mimeType` | 대응값 |
-| `*Id` 접미사 | `userId`, `teamId`, `projectId` | UUID |
-| `*At` 접미사 | `createdAt`, `updatedAt`, `joinedAt` | ISO 날짜 문자열 |
-| `*Date` 접미사 | `startDate`, `endDate`, `dueDate` | ISO 날짜 문자열 |
-| `*Url` 접미사 | `avatarUrl`, `imageUrl` | URL |
-| 그 외 `string` | — | lorem ipsum 단어 |
-
----
-
-## 주의사항
-
-**옵셔널 필드(`?`)는 약 30% 확률로 생략됩니다.**
-
-실행마다 결과가 달라지므로, 특정 필드가 반드시 필요하면 생성 후 직접 지정합니다.
-
-```ts
-import { mocks } from "./mocks"
-
-const user = { ...mocks.UserMock, id: "fixed-id" }
-```
-
----
-
-**`Extract`, `Exclude`, `ReturnType`, `Parameters` 등 고급 유틸리티 타입은 `{}` 로 생성됩니다.**

@@ -1,0 +1,13 @@
+{
+  "name": "ts-to-mock-test-esbuild",
+  "version": "0.0.1",
+  "type": "module",
+  "scripts": {
+    "build": "node ../node_modules/.bin/tsx build.ts",
+    "start": "open index.html"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.0",
+    "@esbuild/darwin-arm64": "^0.28.0"
+  }
+}

@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ts-to-mock — webpack</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #0f1117; color: #e2e8f0; min-height: 100vh; }
+    header { padding: 2rem 2.5rem 1.5rem; border-bottom: 1px solid #1e2535; display: flex; align-items: center; gap: 1.5rem; flex-wrap: wrap; }
+    header h1 { font-size: 1.4rem; font-weight: 700; color: #fff; letter-spacing: -0.02em; }
+    .bundler { font-size: 0.9rem; font-weight: 500; color: #60a5fa; background: #0a0f1a; border: 1px solid #1d3461; padding: 0.15rem 0.5rem; border-radius: 4px; margin-left: 0.4rem; }
+    header p { font-size: 0.875rem; color: #64748b; flex: 1; }
+    #reload { padding: 0.45rem 1.1rem; background: #3b82f6; color: #fff; border: none; border-radius: 6px; font-size: 0.85rem; font-weight: 500; cursor: pointer; transition: background 0.15s; }
+    #reload:hover { background: #2563eb; }
+    #app { display: grid; grid-template-columns: repeat(auto-fill, minmax(480px, 1fr)); gap: 1.25rem; padding: 1.5rem 2.5rem 3rem; }
+    .card { background: #161b27; border: 1px solid #1e2535; border-radius: 10px; overflow: hidden; }
+    .card-header { display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem 1rem; border-bottom: 1px solid #1e2535; background: #1a2030; }
+    .type-label { font-size: 0.8rem; font-weight: 600; color: #94a3b8; background: #0f1117; padding: 0.2rem 0.55rem; border-radius: 4px; border: 1px solid #2d3748; white-space: nowrap; }
+    .call { font-family: "SF Mono", "Fira Code", monospace; font-size: 0.82rem; color: #7dd3fc; }
+    .json { font-family: "SF Mono", "Fira Code", monospace; font-size: 0.78rem; line-height: 1.65; padding: 1rem 1.1rem; overflow-x: auto; color: #cbd5e1; white-space: pre; }
+    .key { color: #93c5fd; } .string { color: #86efac; } .num { color: #fbbf24; } .bool { color: #f472b6; } .null { color: #94a3b8; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>ts-to-mock <span class="bundler">webpack</span></h1>
+    <p>TypeScript 타입 → faker mock 자동 생성</p>
+    <button id="reload">새 데이터 생성</button>
+  </header>
+  <main id="app"></main>
+  <script src="./dist/main.js"></script>
+</body>
+</html>
