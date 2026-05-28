@@ -10,7 +10,15 @@
       "Read(//tmp/**)",
       "WebSearch",
       "Bash(npm list *)",
-      "Bash(npx tsx *)"
+      "Bash(npx tsx *)",
+      "Bash(sed -n '88,105p' /Users/a453492/Desktop/gitRepository/ts-to-mock/src/types/api.ts)",
+      "Bash(sed -n '1,25p' /Users/a453492/Desktop/gitRepository/ts-to-mock/src/types/user.ts)",
+      "Bash(npm uninstall *)",
+      "Bash(node node_modules/esbuild/bin/esbuild --version)",
+      "Bash(node -e \"const e = require\\('./node_modules/esbuild'\\); console.log\\(e.version\\)\")",
+      "Bash(node_modules/.bin/esbuild --version)",
+      "Bash(node node_modules/esbuild/install.js)",
+      "Bash(node -e \"const os=require\\('os'\\); console.log\\(os.platform\\(\\), os.arch\\(\\)\\)\")"
     ]
   }
 }

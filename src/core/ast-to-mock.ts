@@ -1,5 +1,5 @@
 import * as ts from "typescript"
-import { readFileSync, existsSync } from "node:fs"
+import { readFileSync, existsSync, readdirSync } from "node:fs"
 import { resolve, dirname } from "node:path"
 import { faker } from "@faker-js/faker"
 
@@ -129,10 +129,13 @@ function expandCheckerType(type: ts.Type, field: string, typeMap: TypeMap, ctx: 
   if (props.length) {
     const result: Record<string, unknown> = {}
     for (const prop of props) {
-      if (prop.flags & ts.SymbolFlags.Method) continue
       const propType = ctx.checker.getTypeOfSymbol(prop)
       const optional = (prop.flags & ts.SymbolFlags.Optional) !== 0
       if (optional && Math.random() < 0.3) continue
+      if (prop.flags & ts.SymbolFlags.Method || propType.getCallSignatures().length > 0) {
+        result[prop.name] = () => {}
+        continue
+      }
       result[prop.name] = expandCheckerType(propType, prop.name, typeMap, ctx, depth + 1)
     }
     return result
@@ -211,6 +214,13 @@ function typeElementsToMock(
 ): Record<string, unknown> {
   const result: Record<string, unknown> = {}
   for (const member of members) {
+    if (ts.isMethodSignature(member)) {
+      const key = ts.isIdentifier(member.name) ? member.name.text
+        : ts.isStringLiteral(member.name) ? member.name.text
+        : ""
+      if (key) result[key] = () => {}
+      continue
+    }
     if (!ts.isPropertySignature(member) || !member.type) continue
     const key = ts.isIdentifier(member.name)    ? member.name.text
       : ts.isStringLiteral(member.name) ? member.name.text
@@ -340,6 +350,13 @@ function typeNodeToMock(node: ts.TypeNode, typeMap: TypeMap, fieldName?: string,
         }
         if (typeName === "Record") return {}
 
+        // TypeChecker로 먼저 해석: 여러 파일에 같은 이름의 타입이 있을 때
+        // typeMap(전역 last-write-wins)보다 선언 컨텍스트 기반 해석이 정확함
+        if (ctx) {
+          const sym = ctx.checker.getSymbolAtLocation(refNode.typeName)
+          if (sym) return resolveSymbolToMock(sym, typeMap, ctx)
+        }
+
         const entry = typeMap.get(typeName)
         if (entry) {
           if (entry.kind === "enum") {
@@ -353,7 +370,7 @@ function typeNodeToMock(node: ts.TypeNode, typeMap: TypeMap, fieldName?: string,
         }
       }
 
-      // 로컬 typeMap에 없는 경우 → TypeChecker로 외부 타입(node_modules 포함) 해석
+      // QualifiedName (A.B) 등 Identifier가 아닌 경우 → TypeChecker로 처리
       if (ctx) {
         const sym = ctx.checker.getSymbolAtLocation(refNode.typeName)
         if (sym) return resolveSymbolToMock(sym, typeMap, ctx)
@@ -515,4 +532,137 @@ export function toMockList(
   checker?: ts.TypeChecker,
 ): Record<string, unknown>[] {
   return Array.from({ length: count }, () => toMock(typeName, typeMap, checker))
+}
+
+// ─── 프로젝트 전체 스캔 ───────────────────────────────────────────────────────
+
+const SKIP_SUFFIXES = [".test.ts", ".spec.ts", ".test.tsx", ".spec.tsx", ".stories.ts", ".stories.tsx"]
+
+function scanProjectFiles(dir: string, excludeDirs: string[]): string[] {
+  const files: string[] = []
+
+  function walk(current: string): void {
+    let entries
+    try {
+      entries = readdirSync(current, { withFileTypes: true })
+    } catch {
+      return
+    }
+    for (const entry of entries) {
+      if (excludeDirs.includes(entry.name)) continue
+      const fullPath = resolve(current, entry.name)
+      if (entry.isDirectory()) {
+        walk(fullPath)
+      } else if (entry.isFile()) {
+        const { name } = entry
+        if (!name.endsWith(".ts") && !name.endsWith(".tsx")) continue
+        if (SKIP_SUFFIXES.some(s => name.endsWith(s))) continue
+        files.push(fullPath)
+      }
+    }
+  }
+
+  walk(resolve(dir))
+  return files
+}
+
+export function parseTypesFromProject(
+  dir: string,
+  opts: { excludeDirs?: string[]; excludeFiles?: string[] } = {},
+): {
+  typeMap: TypeMap
+  fileTypeMap: Map<string, string[]>
+  checker: ts.TypeChecker
+  compilerOptions: ts.CompilerOptions
+} {
+  const excludeDirs  = opts.excludeDirs ?? []
+  const excludeSet   = new Set((opts.excludeFiles ?? []).map(f => resolve(f)))
+
+  const files = scanProjectFiles(dir, excludeDirs).filter(f => !excludeSet.has(f))
+  if (files.length === 0) throw new Error(`No TypeScript files found in "${dir}"`)
+
+  const compilerOptions = buildCompilerOptions(dir)
+  const program         = ts.createProgram(files, compilerOptions)
+  const checker         = program.getTypeChecker()
+
+  const typeMap: TypeMap             = new Map()
+  const fileTypeMap                  = new Map<string, string[]>()
+  const isExported = (n: ts.Declaration) =>
+    (ts.getCombinedModifierFlags(n) & ts.ModifierFlags.Export) !== 0
+
+  for (const filePath of files) {
+    const sourceFile = program.getSourceFile(filePath)
+    if (!sourceFile) continue
+
+    const exportedNames: string[] = []
+
+    function visit(node: ts.Node): void {
+      if (ts.isInterfaceDeclaration(node)) {
+        // first-write-wins: 여러 파일에 같은 이름이 있을 때 먼저 처리된 파일 기준 유지
+        if (!typeMap.has(node.name.text)) typeMap.set(node.name.text, { kind: "interface", node })
+        if (isExported(node)) exportedNames.push(node.name.text)
+      } else if (ts.isTypeAliasDeclaration(node)) {
+        if (!typeMap.has(node.name.text)) typeMap.set(node.name.text, { kind: "type", node: node.type })
+        if (isExported(node)) exportedNames.push(node.name.text)
+      } else if (ts.isEnumDeclaration(node)) {
+        if (!typeMap.has(node.name.text)) typeMap.set(node.name.text, { kind: "enum", node })
+        if (isExported(node)) exportedNames.push(node.name.text)
+      }
+      ts.forEachChild(node, visit)
+    }
+    visit(sourceFile)
+
+    // import { Foo as Bar } alias 처리
+    for (const stmt of sourceFile.statements) {
+      if (!ts.isImportDeclaration(stmt)) continue
+      const bindings = stmt.importClause?.namedBindings
+      if (!bindings || !ts.isNamedImports(bindings)) continue
+      for (const el of bindings.elements) {
+        const localName    = el.name.text
+        const importedName = el.propertyName?.text ?? localName
+        if (localName !== importedName) {
+          const entry = typeMap.get(importedName)
+          if (entry) typeMap.set(localName, entry)
+        }
+      }
+    }
+
+    if (exportedNames.length > 0) fileTypeMap.set(filePath, exportedNames)
+  }
+
+  return { typeMap, fileTypeMap, checker, compilerOptions }
+}
+
+export function findAssertionFailures(
+  source: string,
+  outFile: string,
+  compilerOptions: ts.CompilerOptions,
+): Set<string> {
+  const outPath = resolve(outFile)
+  const baseHost = ts.createCompilerHost(compilerOptions)
+  const host: ts.CompilerHost = {
+    ...baseHost,
+    getSourceFile(name, lang) {
+      if (resolve(name) === outPath) return ts.createSourceFile(name, source, lang, true)
+      return baseHost.getSourceFile(name, lang)
+    },
+    fileExists(name) {
+      return resolve(name) === outPath || baseHost.fileExists(name)
+    },
+  }
+
+  const checkProg = ts.createProgram([outPath], compilerOptions, host)
+  const sourceFile = checkProg.getSourceFile(outPath)
+  if (!sourceFile) return new Set()
+
+  const failed = new Set<string>()
+  checkProg.getSemanticDiagnostics(sourceFile)
+    .filter(d => d.code === 2352)
+    .forEach(d => {
+      const msg = ts.flattenDiagnosticMessageText(d.messageText, "\n")
+      const match = /to type '([^']+)'/.exec(msg)
+      if (match) failed.add(match[1])
+    })
+
+  return failed
 }
