@@ -36,6 +36,11 @@
       "types": "./dist/esbuild/index.d.ts",
       "import": "./dist/esbuild/index.js",
       "require": "./dist/esbuild/index.cjs"
+    },
+    "./babel": {
+      "types": "./dist/babel/index.d.ts",
+      "import": "./dist/babel/index.js",
+      "require": "./dist/babel/index.cjs"
     }
   },
   "files": [
@@ -53,12 +58,16 @@
     "prepublishOnly": "npm run typecheck && npm run test && npm run build"
   },
   "peerDependencies": {
+    "@babel/core": ">=7.0.0",
     "esbuild": ">=0.18.0",
     "rollup": ">=3.0.0",
     "vite": ">=4.0.0",
     "webpack": ">=5.0.0"
   },
   "peerDependenciesMeta": {
+    "@babel/core": {
+      "optional": true
+    },
     "esbuild": {
       "optional": true
     },

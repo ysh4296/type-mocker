@@ -17,6 +17,7 @@ export default defineConfig({
     "rollup/index":  "src/rollup/index.ts",
     "webpack/index": "src/webpack/index.ts",
     "esbuild/index": "src/esbuild/index.ts",
+    "babel/index":   "src/babel/index.ts",
   },
   format:   ["esm", "cjs"],
   dts:      true,
