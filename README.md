@@ -1,8 +1,7 @@
 # ts-to-mock
 
-TypeScript 타입을 스캔해 faker 기반 mock 데이터를 자동 생성하는 CLI 도구.
-
-번들러 설정 없이 동작합니다. Turbopack · SWC · Vite · webpack — 무엇을 사용하든 상관없습니다.
+TypeScript 타입을 스캔해 faker 기반 mock 데이터를 자동 생성하는 CLI 도구.  
+번들러 설정 없이 동작합니다. Turbopack · SWC · Vite · webpack — 무엇을 써도 상관없습니다.
 
 ---
 
@@ -12,25 +11,49 @@ TypeScript 타입을 스캔해 faker 기반 mock 데이터를 자동 생성하�
 npm install ts-to-mock
 ```
 
+Node.js 14.18 이상이 필요합니다.
+
 ---
 
-## 사용법
+## 실제 활용 패턴
 
-### 1. mock 파일 작성
-
-`createMock<T>()` 를 사용해 mock이 필요한 파일을 작성합니다.
+### 1. TypeScript 타입 정의
 
 ```ts
-// api/user/mockData.ts
-import { createMock, createMockList } from 'ts-to-mock'
+// src/types.ts
+export type User = {
+  id:      number
+  name:    string
+  email:   string
+  phone:   string
+  company: string
+}
 
-export const mockUser     = createMock<User>()
-export const mockUserList = createMockList<User>(3)
+export type Order = {
+  id:        number
+  userId:    number
+  status:    string
+  createdAt: string
+}
 ```
 
+### 2. mock 파일 작성
+
+`createMock<T>()` 로 필요한 mock을 선언합니다.  
 타입은 프로젝트 어디에 선언돼 있어도 자동으로 찾습니다.
 
-### 2. generate 실행
+```ts
+// src/mocks/index.ts
+import { createMock, createMockList } from 'ts-to-mock'
+import type { User, Order } from '../types'
+
+export const mockUser   = createMock<User>()
+export const mockUsers  = createMockList<User>(5)
+export const mockOrder  = createMock<Order>()
+export const mockOrders = createMockList<Order>(5)
+```
+
+### 3. generate 실행
 
 ```bash
 npx ts-mock generate
@@ -43,39 +66,82 @@ npx ts-mock generate
 ```ts
 // __mocks__/index.ts  (자동 생성 — 수정 금지)
 export const UserMock = {
-  id: "f3152fb1-4a2e-4b1a-9f3c-d2e8a1b7c6f0",
-  name: "Lola Friesen",
-  email: "lola@example.com",
+  id:      4,
+  name:    "Lola Friesen",
+  email:   "lola@example.com",
+  phone:   "010-1234-5678",
+  company: "Acme Corp",
+}
+export const UserMockList = [{ ... }, { ... }, { ... }, { ... }, { ... }]
+
+export const OrderMock = {
+  id:        12,
+  userId:    "a3f1...",
+  status:    "shipped",
   createdAt: "2024-03-15T09:23:00.000Z",
 }
-export const UserMockList = [{ ... }, { ... }, { ... }]
+export const OrderMockList = [{ ... }, { ... }, { ... }, { ... }, { ... }]
 ```
 
 **소스 파일 변환** — mock 값을 인자로 자동 주입
 
 ```ts
-// api/user/mockData.ts  (자동 변환)
+// src/mocks/index.ts  (자동 변환)
 import { createMock, createMockList } from 'ts-to-mock'
+import type { User, Order } from '../types'
 import * as mocks from '../../__mocks__'
 
-export const mockUser     = createMock<User>(mocks.UserMock)
-export const mockUserList = createMockList<User>(3, mocks.UserMockList)
+export const mockUser   = createMock<User>(mocks.UserMock)
+export const mockUsers  = createMockList<User>(5, mocks.UserMockList)
+export const mockOrder  = createMock<Order>(mocks.OrderMock)
+export const mockOrders = createMockList<Order>(5, mocks.OrderMockList)
 ```
 
-번들러는 이미 값이 채워진 평범한 함수 호출만 보게 됩니다.
+### 4. API 함수에서 mock 분기 처리
 
-### 3. predev / prebuild 등록
+환경 변수로 mock 모드와 실제 API를 구분합니다.
+
+```ts
+// src/api/users.ts
+import type { User } from '../types'
+
+const isMock = import.meta.env.VITE_MOCK === 'true'  // Vite
+// const isMock = process.env.NEXT_PUBLIC_MOCK === 'true'  // Next.js
+
+export async function fetchUsers(): Promise<User[]> {
+  if (isMock) {
+    const { mockUsers } = await import('../mocks')
+    return mockUsers
+  }
+  const res = await fetch('/api/users')
+  return res.json()
+}
+```
+
+dynamic import를 사용하면 mock 코드가 실제 빌드에서 트리 쉐이킹됩니다.
+
+### 5. 스크립트 등록
 
 ```json
 {
   "scripts": {
-    "predev":   "ts-mock generate",
+    "dev":      "vite",
+    "dev:mock": "ts-mock generate && vite --mode mock",
+    "build":    "vite build",
     "prebuild": "ts-mock generate"
   }
 }
 ```
 
-`__mocks__/` 는 자동으로 `.gitignore` 에 추가됩니다.
+```
+# .env.mock
+VITE_MOCK=true
+```
+
+```bash
+npm run dev       # 실제 API
+npm run dev:mock  # mock 데이터
+```
 
 ---
 
@@ -85,9 +151,9 @@ export const mockUserList = createMockList<User>(3, mocks.UserMockList)
 ts-mock generate [options]
 
 Options:
-  -d, --dir <dir>       스캔할 루트 디렉토리  (기본값: .)
-  -o, --output <dir>    mock 파일 출력 경로   (기본값: __mocks__)
-  --exclude <dirs...>   제외할 디렉토리 이름
+  -d, --dir <dir>      스캔할 루트 디렉토리  (기본값: .)
+  -o, --output <dir>   mock 파일 출력 경로   (기본값: __mocks__)
+  --exclude <dirs...>  제외할 디렉토리 이름
 ```
 
 ```bash
@@ -141,7 +207,7 @@ npx ts-mock generate --dir ./src --output __generated__ --exclude fixtures e2e
 **고급 유틸리티 타입 (`Extract`, `Exclude`, `ReturnType`, `Parameters` 등) 은 `{}` 를 생성합니다.**
 
 **`ts-mock generate` 를 실행하지 않고 `createMock<T>()` 를 호출하면 런타임 에러가 발생합니다.**  
-반드시 `predev` / `prebuild` 스크립트에 등록해 두세요.
+`dev:mock` 스크립트처럼 generate 후 서버를 실행하는 형태로 등록해 두세요.
 
 </details>
 
@@ -160,8 +226,8 @@ ts-mock generate
 __mocks__/index.ts 출력
   ↓
 소스 파일 변환
-  → createMock<T>()           →  createMock<T>(mocks.TMock)
-  → createMockList<T>(n)      →  createMockList<T>(n, mocks.TMockList)
+  → createMock<T>()      →  createMock<T>(mocks.TMock)
+  → createMockList<T>(n) →  createMockList<T>(n, mocks.TMockList)
   → import * as mocks from '...' 자동 삽입
 ```
 
