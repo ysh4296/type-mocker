@@ -1,28 +1,25 @@
 import { defineConfig } from "tsup"
 
-const external = [
-  "typescript",
-  "@faker-js/faker",
-  "vite",
-  "rollup",
-  "webpack",
-  "esbuild",
-]
+const external = ["typescript", "@faker-js/faker"]
 
-export default defineConfig({
-  entry: {
-    "index":         "src/index.ts",
-    "plugin/index":  "src/plugin/index.ts",
-    "vite/index":    "src/vite/index.ts",
-    "rollup/index":  "src/rollup/index.ts",
-    "webpack/index": "src/webpack/index.ts",
-    "esbuild/index": "src/esbuild/index.ts",
-    "babel/index":   "src/babel/index.ts",
+export default defineConfig([
+  {
+    entry:    { "index": "src/index.ts" },
+    format:   ["esm", "cjs"],
+    dts:      true,
+    clean:    true,
+    external,
+    shims:    true,
+    tsconfig: "tsconfig.build.json",
   },
-  format:   ["esm", "cjs"],
-  dts:      true,
-  clean:    true,
-  external,
-  shims:    true,
-  tsconfig: "tsconfig.build.json",
-})
+  {
+    entry:    { "cli/index": "src/cli/index.ts" },
+    format:   ["esm"],
+    dts:      false,
+    clean:    false,
+    external: [...external, "commander"],
+    shims:    true,
+    tsconfig: "tsconfig.build.json",
+    banner:   { js: "#!/usr/bin/env node" },
+  },
+])

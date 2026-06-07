@@ -10,6 +10,11 @@ const SKIP_SUFFIXES = [
   ".stories.ts", ".stories.tsx",
 ]
 
+const DEFAULT_SKIP_DIRS = new Set([
+  "node_modules", ".git", "dist", "out", "build",
+  ".next", ".turbo", ".cache", ".vite", "coverage",
+])
+
 // ─── Compiler setup ───────────────────────────────────────────────────────────
 
 /**
@@ -73,7 +78,7 @@ export function scanProjectFiles(dir: string, excludeDirs: string[]): string[] {
     catch { return }
 
     for (const entry of entries) {
-      if (excludeDirs.includes(entry.name)) continue
+      if (DEFAULT_SKIP_DIRS.has(entry.name) || excludeDirs.includes(entry.name)) continue
       const fullPath = resolve(current, entry.name)
       if (entry.isDirectory()) {
         walk(fullPath)

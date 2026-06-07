@@ -24,7 +24,7 @@ export function expandCheckerType(
 
   // Primitive flags
   if (type.flags & ts.TypeFlags.String)    return getStringHint(field)
-  if (type.flags & ts.TypeFlags.Number)    return faker.number.int({ min: 0, max: 100 })
+  if (type.flags & ts.TypeFlags.Number)    return faker.datatype.number({ min: 0, max: 100 })
   if (type.flags & ts.TypeFlags.Boolean)   return faker.datatype.boolean()
   if (type.flags & ts.TypeFlags.Null)      return null
   if (type.flags & ts.TypeFlags.Undefined) return undefined
@@ -59,7 +59,7 @@ export function expandCheckerType(
   if (ctx.checker.isArrayType(type)) {
     const args = ctx.checker.getTypeArguments(type as ts.TypeReference)
     if (args.length) {
-      const len = faker.number.int({ min: 1, max: 4 })
+      const len = faker.datatype.number({ min: 1, max: 4 })
       return Array.from({ length: len }, () =>
         expandCheckerType(args[0], "", typeMap, ctx, depth + 1),
       )
