@@ -3,7 +3,7 @@ import type { User, Post, Product, Order, Comment } from "../types"
 import * as mocks from "../../__mocks__"
 
 export const mockUser     = createMock<User>(mocks.UserMock)
-export const mockUsers    = createMockList<User>(1, mocks.UserMockList)
+export const mockUsers    = createMockList<User>(5, mocks.UserMockList)
 
 export const mockPost     = createMock<Post>(mocks.PostMock)
 export const mockPosts    = createMockList<Post>(5, mocks.PostMockList)

@@ -1,7 +1,7 @@
 # ts-to-mock
 
 TypeScript 타입을 스캔해 faker 기반 mock 데이터를 자동 생성하는 CLI 도구.  
-번들러 설정 없이 동작합니다. Turbopack · SWC · Vite · webpack — 무엇을 써도 상관없습니다.
+번들러 설정이 필요 없습니다. Turbopack · SWC · Vite · webpack · Next.js — 무엇을 써도 동작합니다.
 
 ---
 
@@ -28,13 +28,6 @@ export type User = {
   phone:   string
   company: string
 }
-
-export type Order = {
-  id:        number
-  userId:    number
-  status:    string
-  createdAt: string
-}
 ```
 
 ### 2. mock 파일 작성
@@ -45,12 +38,10 @@ export type Order = {
 ```ts
 // src/mocks/index.ts
 import { createMock, createMockList } from 'ts-to-mock'
-import type { User, Order } from '../types'
+import type { User } from '../types'
 
-export const mockUser   = createMock<User>()
-export const mockUsers  = createMockList<User>(5)
-export const mockOrder  = createMock<Order>()
-export const mockOrders = createMockList<Order>(5)
+export const mockUser  = createMock<User>()
+export const mockUsers = createMockList<User>(5)
 ```
 
 ### 3. generate 실행
@@ -61,7 +52,7 @@ npx ts-mock generate
 
 두 가지 작업이 자동으로 처리됩니다.
 
-**`__mocks__/index.ts` 생성**
+**`__mocks__/index.ts` 생성** — faker로 실제 값 채움
 
 ```ts
 // __mocks__/index.ts  (자동 생성 — 수정 금지)
@@ -73,14 +64,6 @@ export const UserMock = {
   company: "Acme Corp",
 }
 export const UserMockList = [{ ... }, { ... }, { ... }, { ... }, { ... }]
-
-export const OrderMock = {
-  id:        12,
-  userId:    "a3f1...",
-  status:    "shipped",
-  createdAt: "2024-03-15T09:23:00.000Z",
-}
-export const OrderMockList = [{ ... }, { ... }, { ... }, { ... }, { ... }]
 ```
 
 **소스 파일 변환** — mock 값을 인자로 자동 주입
@@ -88,25 +71,41 @@ export const OrderMockList = [{ ... }, { ... }, { ... }, { ... }, { ... }]
 ```ts
 // src/mocks/index.ts  (자동 변환)
 import { createMock, createMockList } from 'ts-to-mock'
-import type { User, Order } from '../types'
+import type { User } from '../types'
 import * as mocks from '../../__mocks__'
 
-export const mockUser   = createMock<User>(mocks.UserMock)
-export const mockUsers  = createMockList<User>(5, mocks.UserMockList)
-export const mockOrder  = createMock<Order>(mocks.OrderMock)
-export const mockOrders = createMockList<Order>(5, mocks.OrderMockList)
+export const mockUser  = createMock<User>(mocks.UserMock)
+export const mockUsers = createMockList<User>(5, mocks.UserMockList)
 ```
 
-### 4. API 함수에서 mock 분기 처리
+### 4. mock 데이터 사용
 
-환경 변수로 mock 모드와 실제 API를 구분합니다.
+generate 이후에는 mock 파일에서 직접 가져다 쓰면 됩니다.  
+mock / real 전환 방식은 프로젝트에 맞게 자유롭게 선택하면 돼요.
+
+**방식 A. 함수 인자로 전환**
 
 ```ts
 // src/api/users.ts
 import type { User } from '../types'
 
-const isMock = import.meta.env.VITE_MOCK === 'true'  // Vite
-// const isMock = process.env.NEXT_PUBLIC_MOCK === 'true'  // Next.js
+export async function fetchUsers(mock: boolean): Promise<User[]> {
+  if (mock) {
+    const { mockUsers } = await import('../mocks')
+    return mockUsers
+  }
+  const res = await fetch('/api/users')
+  return res.json()
+}
+```
+
+**방식 B. 환경 변수로 전환**
+
+```ts
+// 프레임워크에 맞게 환경 변수 읽기
+const isMock = process.env.MOCK === 'true'           // Node.js / webpack
+// const isMock = import.meta.env.VITE_MOCK === 'true'  // Vite
+// const isMock = process.env.NEXT_PUBLIC_MOCK === 'true' // Next.js
 
 export async function fetchUsers(): Promise<User[]> {
   if (isMock) {
@@ -125,22 +124,10 @@ dynamic import를 사용하면 mock 코드가 실제 빌드에서 트리 쉐이�
 ```json
 {
   "scripts": {
-    "dev":      "vite",
-    "dev:mock": "ts-mock generate && vite --mode mock",
-    "build":    "vite build",
-    "prebuild": "ts-mock generate"
+    "generate": "ts-mock generate",
+    "dev":      "ts-mock generate && vite"
   }
 }
-```
-
-```
-# .env.mock
-VITE_MOCK=true
-```
-
-```bash
-npm run dev       # 실제 API
-npm run dev:mock  # mock 데이터
 ```
 
 ---
@@ -206,8 +193,7 @@ npx ts-mock generate --dir ./src --output __generated__ --exclude fixtures e2e
 
 **고급 유틸리티 타입 (`Extract`, `Exclude`, `ReturnType`, `Parameters` 등) 은 `{}` 를 생성합니다.**
 
-**`ts-mock generate` 를 실행하지 않고 `createMock<T>()` 를 호출하면 런타임 에러가 발생합니다.**  
-`dev:mock` 스크립트처럼 generate 후 서버를 실행하는 형태로 등록해 두세요.
+**`ts-mock generate` 를 실행하지 않은 상태에서 mock 파일을 import 하면 런타임 에러가 발생합니다.**
 
 </details>
 
