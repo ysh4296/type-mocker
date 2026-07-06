@@ -19,9 +19,10 @@ export function resolveSymbolToMock(
   ctx: Ctx,
 ): unknown {
   // Unwrap `import { X }` aliases to the original declaration
+  // (checker is always defined here — call sites only reach this function after a `ctx?.checker` guard)
   const resolved =
     symbol.flags & ts.SymbolFlags.Alias
-      ? ctx.checker.getAliasedSymbol(symbol)
+      ? ctx.checker!.getAliasedSymbol(symbol)
       : symbol
 
   const decls = resolved.getDeclarations()
@@ -48,7 +49,7 @@ export function resolveSymbolToMock(
     }
 
     // Class declarations and everything else: fall back to structural expansion
-    const type = ctx.checker.getDeclaredTypeOfSymbol(resolved)
+    const type = ctx.checker!.getDeclaredTypeOfSymbol(resolved)
     return expandCheckerType(type, "", typeMap, ctx)
   } finally {
     ctx.resolving.delete(decl)
@@ -78,7 +79,7 @@ export function interfaceToMock(
         const entry = name ? typeMap.get(name) : undefined
         if (entry?.kind === "interface") {
           Object.assign(result, interfaceToMock(entry.node, typeMap, ctx))
-        } else if (ctx) {
+        } else if (ctx?.checker) {
           const sym = ctx.checker.getSymbolAtLocation(type.expression)
           if (sym) {
             const v = resolveSymbolToMock(sym, typeMap, ctx)
@@ -252,7 +253,7 @@ function resolveTypeReference(
 ): unknown {
   if (!ts.isIdentifier(refNode.typeName)) {
     // QualifiedName (A.B) — delegate to TypeChecker
-    if (ctx) {
+    if (ctx?.checker) {
       const sym = ctx.checker.getSymbolAtLocation(refNode.typeName)
       if (sym) return resolveSymbolToMock(sym, typeMap, ctx)
       const type = ctx.checker.getTypeAtLocation(refNode)
@@ -306,12 +307,15 @@ function resolveTypeReference(
   // ── TypeChecker lookup (preferred for multi-file accuracy) ──────────────
   // Resolving via the checker is more accurate than the flat typeMap when
   // multiple files export types with the same name.
-  if (ctx) {
+  if (ctx?.checker) {
     const sym = ctx.checker.getSymbolAtLocation(refNode.typeName)
     if (sym) return resolveSymbolToMock(sym, typeMap, ctx)
   }
 
   // ── Local typeMap fallback ───────────────────────────────────────────────
+  // Guarded by ctx.resolving even when there's no checker, so self-referential
+  // types (e.g. `interface TreeNode { children: TreeNode[] }`) can't recurse
+  // forever and blow the call stack on this AST-only path.
   const entry = typeMap.get(typeName)
   if (entry) {
     if (entry.kind === "enum") {
@@ -322,12 +326,18 @@ function resolveTypeReference(
         : String(members.indexOf(picked))
       return new EnumRef(`${typeName}.${memberName}`)
     }
-    if (entry.kind === "interface") return interfaceToMock(entry.node, typeMap, ctx)
-    return typeNodeToMock(entry.node, typeMap, fieldName, ctx)
+    if (ctx?.resolving.has(entry.node)) return {}
+    ctx?.resolving.add(entry.node)
+    try {
+      if (entry.kind === "interface") return interfaceToMock(entry.node, typeMap, ctx)
+      return typeNodeToMock(entry.node, typeMap, fieldName, ctx)
+    } finally {
+      ctx?.resolving.delete(entry.node)
+    }
   }
 
   // ── TypeChecker structural fallback ─────────────────────────────────────
-  if (ctx) {
+  if (ctx?.checker) {
     const type = ctx.checker.getTypeAtLocation(refNode)
     if (!(type.flags & ts.TypeFlags.Any))
       return expandCheckerType(type, fieldName ?? "", typeMap, ctx)

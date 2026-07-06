@@ -1,6 +1,6 @@
 import * as ts from "typescript"
 import { faker } from "@faker-js/faker"
-import { EnumRef, type TypeMap } from "./types"
+import { EnumRef, type TypeMap, type Ctx } from "./types"
 import { interfaceToMock, typeNodeToMock } from "./ast-resolver"
 
 /**
@@ -21,7 +21,9 @@ export function toMock(
   const entry = typeMap.get(typeName)
   if (!entry) throw new Error(`Type "${typeName}" not found in type registry`)
 
-  const ctx = checker ? { checker, resolving: new Set<ts.Declaration>() } : undefined
+  // Always build a resolving set, even without a checker, so self-referential
+  // types can't stack-overflow the AST-only fallback path (see ast-resolver.ts).
+  const ctx: Ctx = { checker, resolving: new Set<ts.Node>() }
 
   let base: unknown
   if (entry.kind === "interface") {

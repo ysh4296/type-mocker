@@ -1,23 +1,23 @@
 # ts-to-mock
 
-TypeScript 타입을 스캔해 faker 기반 mock 데이터를 자동 생성하는 CLI 도구.  
-번들러 설정이 필요 없습니다. Turbopack · SWC · Vite · webpack · Next.js — 무엇을 써도 동작합니다.
+A CLI tool that scans your TypeScript types and auto-generates faker-based mock data.  
+No bundler configuration required. Works with Turbopack, SWC, Vite, webpack, Next.js — anything.
 
 ---
 
-## 설치
+## Install
 
 ```bash
 npm install ts-to-mock
 ```
 
-Node.js 14.18 이상이 필요합니다.
+Requires Node.js 14.18 or later.
 
 ---
 
-## 실제 활용 패턴
+## Real-world usage pattern
 
-### 1. TypeScript 타입 정의
+### 1. Define your TypeScript types
 
 ```ts
 // src/types.ts
@@ -30,10 +30,10 @@ export type User = {
 }
 ```
 
-### 2. mock 파일 작성
+### 2. Write a mock file
 
-`createMock<T>()` 로 필요한 mock을 선언합니다.  
-타입은 프로젝트 어디에 선언돼 있어도 자동으로 찾습니다.
+Declare the mocks you need with `createMock<T>()`.  
+The type can be declared anywhere in your project — it's found automatically.
 
 ```ts
 // src/mocks/index.ts
@@ -44,18 +44,18 @@ export const mockUser  = createMock<User>()
 export const mockUsers = createMockList<User>(5)
 ```
 
-### 3. generate 실행
+### 3. Run generate
 
 ```bash
 npx ts-mock generate
 ```
 
-두 가지 작업이 자동으로 처리됩니다.
+Two things happen automatically.
 
-**`__mocks__/index.ts` 생성** — faker로 실제 값 채움
+**Generates `__mocks__/index.ts`** — filled with real faker values
 
 ```ts
-// __mocks__/index.ts  (자동 생성 — 수정 금지)
+// __mocks__/index.ts  (auto-generated — do not edit)
 export const UserMock = {
   id:      4,
   name:    "Lola Friesen",
@@ -66,10 +66,10 @@ export const UserMock = {
 export const UserMockList = [{ ... }, { ... }, { ... }, { ... }, { ... }]
 ```
 
-**소스 파일 변환** — mock 값을 인자로 자동 주입
+**Transforms your source file** — automatically injects the mock values as arguments
 
 ```ts
-// src/mocks/index.ts  (자동 변환)
+// src/mocks/index.ts  (auto-transformed)
 import { createMock, createMockList } from 'ts-to-mock'
 import type { User } from '../types'
 import * as mocks from '../../__mocks__'
@@ -78,12 +78,12 @@ export const mockUser  = createMock<User>(mocks.UserMock)
 export const mockUsers = createMockList<User>(5, mocks.UserMockList)
 ```
 
-### 4. mock 데이터 사용
+### 4. Use the mock data
 
-generate 이후에는 mock 파일에서 직접 가져다 쓰면 됩니다.  
-mock / real 전환 방식은 프로젝트에 맞게 자유롭게 선택하면 돼요.
+Once generated, just import from your mock file wherever you need it.  
+Feel free to pick whatever mock/real switching strategy suits your project.
 
-**방식 A. 함수 인자로 전환**
+**Option A. Switch via a function argument**
 
 ```ts
 // src/api/users.ts
@@ -99,10 +99,10 @@ export async function fetchUsers(mock: boolean): Promise<User[]> {
 }
 ```
 
-**방식 B. 환경 변수로 전환**
+**Option B. Switch via an environment variable**
 
 ```ts
-// 프레임워크에 맞게 환경 변수 읽기
+// Read the env var however your framework does it
 const isMock = process.env.MOCK === 'true'           // Node.js / webpack
 // const isMock = import.meta.env.VITE_MOCK === 'true'  // Vite
 // const isMock = process.env.NEXT_PUBLIC_MOCK === 'true' // Next.js
@@ -117,9 +117,9 @@ export async function fetchUsers(): Promise<User[]> {
 }
 ```
 
-dynamic import를 사용하면 mock 코드가 실제 빌드에서 트리 쉐이킹됩니다.
+Using dynamic imports lets the mock code get tree-shaken out of your production build.
 
-### 5. 스크립트 등록
+### 5. Add an npm script
 
 ```json
 {
@@ -132,15 +132,15 @@ dynamic import를 사용하면 mock 코드가 실제 빌드에서 트리 쉐이�
 
 ---
 
-## CLI 옵션
+## CLI options
 
 ```
 ts-mock generate [options]
 
 Options:
-  -d, --dir <dir>      스캔할 루트 디렉토리  (기본값: .)
-  -o, --output <dir>   mock 파일 출력 경로   (기본값: __mocks__)
-  --exclude <dirs...>  제외할 디렉토리 이름
+  -d, --dir <dir>      Root directory to scan  (default: .)
+  -o, --output <dir>   Mock file output path   (default: __mocks__)
+  --exclude <dirs...>  Directory names to exclude
 ```
 
 ```bash
@@ -150,71 +150,71 @@ npx ts-mock generate --dir ./src --output __generated__ --exclude fixtures e2e
 ---
 
 <details>
-<summary>지원 타입</summary>
+<summary>Supported types</summary>
 
-| 기능 | 지원 |
+| Feature | Support |
 |---|---|
 | `interface`, `type alias`, `enum` | ✓ |
 | `union`, `intersection`, `tuple` | ✓ |
 | `Partial` / `Required` / `Readonly` / `Pick` / `Omit` / `Promise` / `Array<T>` | ✓ |
-| `interface extends` 상속 | ✓ |
-| 프로젝트 파일 자동 탐색 | ✓ |
-| `node_modules` 타입 | ✓ TypeChecker 경유 |
-| 네임스페이스 타입 (`WebAssembly.Memory` 등) | ✓ TypeChecker 경유 |
-| 함수 타입 / 메서드 시그니처 | ✓ `() => {}` stub 생성 |
-| 순환 참조 | ✓ 깊이 6 자동 차단 |
-| 고급 유틸리티 (`Extract`, `Exclude`, `ReturnType` 등) | △ `{}` 생성 |
+| `interface extends` inheritance | ✓ |
+| Automatic project-wide file discovery | ✓ |
+| `node_modules` types | ✓ via TypeChecker |
+| Namespaced types (e.g. `WebAssembly.Memory`) | ✓ via TypeChecker |
+| Function types / method signatures | ✓ generates `() => {}` stubs |
+| Circular references | ✓ auto-cutoff at depth 6 |
+| Advanced utility types (`Extract`, `Exclude`, `ReturnType`, etc.) | △ generates `{}` |
 
 </details>
 
 <details>
-<summary>필드명 추론</summary>
+<summary>Field name inference</summary>
 
-필드명을 분석해 의미 있는 faker 값을 생성합니다.
+Field names are analyzed to generate meaningful faker values.
 
-| 패턴 | 예시 필드 | 생성 값 |
+| Pattern | Example field | Generated value |
 |---|---|---|
-| 정확히 일치 | `id` | UUID |
-| 정확히 일치 | `name`, `email`, `phone`, `company` | faker 해당값 |
-| 정확히 일치 | `timezone`, `locale`, `slug`, `ip`, `mimeType` | faker 해당값 |
-| `*Id` 접미사 | `userId`, `teamId` | UUID |
-| `*At` 접미사 | `createdAt`, `updatedAt` | ISO 날짜 문자열 |
-| `*Date` 접미사 | `startDate`, `dueDate` | ISO 날짜 문자열 |
-| `*Url` 접미사 | `avatarUrl`, `imageUrl` | URL |
-| 그 외 `string` | — | lorem ipsum 단어 |
+| Exact match | `id` | UUID |
+| Exact match | `name`, `email`, `phone`, `company` | corresponding faker value |
+| Exact match | `timezone`, `locale`, `slug`, `ip`, `mimeType` | corresponding faker value |
+| `*Id` suffix | `userId`, `teamId` | UUID |
+| `*At` suffix | `createdAt`, `updatedAt` | ISO date string |
+| `*Date` suffix | `startDate`, `dueDate` | ISO date string |
+| `*Url` suffix | `avatarUrl`, `imageUrl` | URL |
+| Any other `string` | — | lorem ipsum word |
 
 </details>
 
 <details>
-<summary>주의사항</summary>
+<summary>Caveats</summary>
 
-**옵셔널 필드 (`?`) 는 약 30% 확률로 생략됩니다.**  
-고정 값이 필요하면 생성 후 해당 필드를 직접 덮어쓰세요.
+**Optional fields (`?`) are omitted about 30% of the time.**  
+If you need a fixed value, overwrite that field directly after generation.
 
-**고급 유틸리티 타입 (`Extract`, `Exclude`, `ReturnType`, `Parameters` 등) 은 `{}` 를 생성합니다.**
+**Advanced utility types (`Extract`, `Exclude`, `ReturnType`, `Parameters`, etc.) generate `{}`.**
 
-**`ts-mock generate` 를 실행하지 않은 상태에서 mock 파일을 import 하면 런타임 에러가 발생합니다.**
+**Importing a mock file before running `ts-mock generate` will throw a runtime error.**
 
 </details>
 
 <details>
-<summary>동작 원리</summary>
+<summary>How it works</summary>
 
 ```
 ts-mock generate
   ↓
-프로젝트 스캔
-  → .ts / .tsx 파일 수집 (테스트·스토리 파일 제외)
-  → ts.createProgram() 으로 전체 프로그램 빌드 (tsconfig.json 자동 감지)
-  → TypeChecker 로 타입 참조 해석
-  → faker 로 필드명·타입 기반 랜덤 데이터 생성
+Scan the project
+  → Collect .ts / .tsx files (excluding test/story files)
+  → Build the full program with ts.createProgram() (tsconfig.json auto-detected)
+  → Resolve type references with the TypeChecker
+  → Generate random data with faker based on field name and type
   ↓
-__mocks__/index.ts 출력
+Emit __mocks__/index.ts
   ↓
-소스 파일 변환
+Transform source files
   → createMock<T>()      →  createMock<T>(mocks.TMock)
   → createMockList<T>(n) →  createMockList<T>(n, mocks.TMockList)
-  → import * as mocks from '...' 자동 삽입
+  → Auto-insert `import * as mocks from '...'`
 ```
 
 </details>

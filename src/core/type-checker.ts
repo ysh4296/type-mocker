@@ -56,8 +56,9 @@ export function expandCheckerType(
   }
 
   // Array types: generate a short list of the element type
-  if (ctx.checker.isArrayType(type)) {
-    const args = ctx.checker.getTypeArguments(type as ts.TypeReference)
+  // (checker is always defined here — callers only reach expandCheckerType after a `ctx?.checker` guard)
+  if (ctx.checker!.isArrayType(type)) {
+    const args = ctx.checker!.getTypeArguments(type as ts.TypeReference)
     if (args.length) {
       const len = faker.datatype.number({ min: 1, max: 4 })
       return Array.from({ length: len }, () =>
@@ -72,7 +73,7 @@ export function expandCheckerType(
   if (props.length) {
     const result: Record<string, unknown> = {}
     for (const prop of props) {
-      const propType = ctx.checker.getTypeOfSymbol(prop)
+      const propType = ctx.checker!.getTypeOfSymbol(prop)
       const optional = (prop.flags & ts.SymbolFlags.Optional) !== 0
       if (optional && Math.random() < 0.3) continue
       if (

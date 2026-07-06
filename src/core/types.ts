@@ -23,6 +23,6 @@ export type TypeMap = Map<string, TypeEntry>
  * to prevent infinite recursion on self-referential types.
  */
 export type Ctx = {
-  checker:   ts.TypeChecker
-  resolving: Set<ts.Declaration>
+  checker?:  ts.TypeChecker
+  resolving: Set<ts.Node>
 }
