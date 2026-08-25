@@ -1,4 +1,4 @@
-import { createMock, createMockList } from "ts-to-mock"
+import { createMock, createMockList } from "type-mocker"
 import type { User, Post, Product, Order, Comment } from "../types"
 import * as mocks from "../../__mocks__"
 

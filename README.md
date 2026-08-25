@@ -1,4 +1,4 @@
-# ts-to-mock
+# type-mocker
 
 A CLI tool that scans your TypeScript types and auto-generates faker-based mock data.  
 No bundler configuration required. Works with Turbopack, SWC, Vite, webpack, Next.js — anything.
@@ -8,7 +8,7 @@ No bundler configuration required. Works with Turbopack, SWC, Vite, webpack, Nex
 ## Install
 
 ```bash
-npm install ts-to-mock
+npm install type-mocker
 ```
 
 Requires Node.js 14.18 or later.
@@ -37,7 +37,7 @@ The type can be declared anywhere in your project — it's found automatically.
 
 ```ts
 // src/mocks/index.ts
-import { createMock, createMockList } from 'ts-to-mock'
+import { createMock, createMockList } from 'type-mocker'
 import type { User } from '../types'
 
 export const mockUser  = createMock<User>()
@@ -70,7 +70,7 @@ export const UserMockList = [{ ... }, { ... }, { ... }, { ... }, { ... }]
 
 ```ts
 // src/mocks/index.ts  (auto-transformed)
-import { createMock, createMockList } from 'ts-to-mock'
+import { createMock, createMockList } from 'type-mocker'
 import type { User } from '../types'
 import * as mocks from '../../__mocks__'
 

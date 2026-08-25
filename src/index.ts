@@ -1,7 +1,7 @@
 function buildError(fn: string): Error {
-  let msg = `[ts-to-mock] ${fn} was not replaced.\n`
+  let msg = `[type-mocker] ${fn} was not replaced.\n`
   msg    += `  Run: npx ts-mock generate\n`
-  msg    += `  Or:  add ts-to-mock plugin to your bundler config.\n`
+  msg    += `  Or:  add type-mocker plugin to your bundler config.\n`
   return new Error(msg)
 }
 

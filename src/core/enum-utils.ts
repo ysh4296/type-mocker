@@ -1,4 +1,6 @@
-import { relative, dirname } from "node:path"
+import { posix } from "node:path"
+
+const toPosix = (p: string): string => p.replace(/\\/g, "/")
 import { EnumRef } from "./types"
 
 export function collectEnumNames(value: unknown, names: Set<string>): void {
@@ -39,8 +41,7 @@ export function buildEnumImports(
 
   return [...byFile.entries()]
     .map(([filePath, names]) => {
-      const rel        = relative(dirname(currentFile), filePath)
-        .replace(/\\/g, "/")
+      const rel        = posix.relative(posix.dirname(toPosix(currentFile)), toPosix(filePath))
         .replace(/\.tsx?$/, "")
       const importPath = rel.startsWith(".") ? rel : "./" + rel
       return `import { ${names.join(", ")} } from "${importPath}"`

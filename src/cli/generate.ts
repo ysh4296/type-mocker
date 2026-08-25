@@ -1,5 +1,5 @@
 import { resolve, relative, dirname, join } from "node:path"
-import { readFileSync, writeFileSync, mkdirSync, readdirSync } from "node:fs"
+import { readFileSync, writeFileSync, mkdirSync, readdirSync, type Dirent } from "node:fs"
 import { parseTypesFromProject, toMock } from "../core/ast-to-mock"
 import { serialize } from "../core/serialize"
 import { getStringRanges, isInsideString } from "../core/string-utils"
@@ -21,7 +21,7 @@ const SKIP_PATTERN = /\.(test|spec|stories)\.[jt]sx?$|\.d\.ts$/
 
 function walkFiles(dir: string, excludes: string[]): string[] {
   const results: string[] = []
-  let entries: ReturnType<typeof readdirSync>
+  let entries: Dirent[]
   try { entries = readdirSync(dir, { withFileTypes: true }) } catch { return results }
 
   for (const entry of entries) {

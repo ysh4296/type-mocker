@@ -1,8 +1,22 @@
 {
-  "name": "ts-to-mock",
+  "name": "type-mocker",
   "version": "0.1.0",
   "description": "TypeScript type → faker mock generator CLI",
   "type": "module",
+  "license": "MIT",
+  "author": "cadi",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ysh4296/unplugin-ts-mock.git"
+  },
+  "keywords": [
+    "typescript",
+    "mock",
+    "faker",
+    "cli",
+    "codegen",
+    "test-data"
+  ],
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -14,7 +28,7 @@
     }
   },
   "bin": {
-    "ts-mock": "./dist/cli/index.js"
+    "ts-mock": "dist/cli/index.js"
   },
   "files": [
     "dist",

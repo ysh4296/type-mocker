@@ -1,5 +1,5 @@
 {
-  "name": "ts-to-mock-test",
+  "name": "type-mocker-test",
   "version": "0.0.1",
   "private": true,
   "type": "module",
@@ -13,7 +13,7 @@
   "dependencies": {
     "react":      "^18.3.0",
     "react-dom":  "^18.3.0",
-    "ts-to-mock": "file:../"
+    "type-mocker": "file:../"
   },
   "devDependencies": {
     "@types/react":         "^18.3.0",
