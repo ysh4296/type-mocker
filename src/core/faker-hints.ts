@@ -2,11 +2,11 @@ import { faker } from "@faker-js/faker"
 
 const STRING_HINTS: Record<string, () => string> = {
   // person
-  name:         () => faker.name.fullName(),
-  firstName:    () => faker.name.firstName(),
-  lastName:     () => faker.name.lastName(),
-  username:     () => faker.internet.userName(),
-  jobTitle:     () => faker.name.jobTitle(),
+  name:         () => faker.person.fullName(),
+  firstName:    () => faker.person.firstName(),
+  lastName:     () => faker.person.lastName(),
+  username:     () => faker.internet.username(),
+  jobTitle:     () => faker.person.jobTitle(),
   // contact
   email:        () => faker.internet.email(),
   phone:        () => faker.phone.number(),
@@ -19,27 +19,27 @@ const STRING_HINTS: Record<string, () => string> = {
   excerpt:      () => faker.lorem.sentence(),
   query:        () => faker.lorem.words(2),
   // location
-  city:         () => faker.address.city(),
-  address:      () => faker.address.streetAddress(),
-  country:      () => faker.address.country(),
-  timezone:     () => faker.address.timeZone(),
+  city:         () => faker.location.city(),
+  address:      () => faker.location.streetAddress(),
+  country:      () => faker.location.country(),
+  timezone:     () => faker.location.timeZone(),
   // company / web
   company:      () => faker.company.name(),
   url:          () => faker.internet.url(),
   link:         () => faker.internet.url(),
   website:      () => faker.internet.url(),
-  ip:           () => faker.internet.ip(),
-  ipAddress:    () => faker.internet.ip(),
+  ip:           () => faker.internet.ipv4(),
+  ipAddress:    () => faker.internet.ipv4(),
   // identifiers
-  id:           () => faker.datatype.uuid(),
+  id:           () => faker.string.uuid(),
   slug:         () => faker.helpers.slugify(faker.lorem.words(2)).toLowerCase(),
   // auth tokens
   password:     () => faker.internet.password(),
-  secret:       () => faker.random.alphaNumeric(32),
-  token:        () => faker.random.alphaNumeric(40),
-  accessToken:  () => faker.random.alphaNumeric(40),
-  refreshToken: () => faker.random.alphaNumeric(40),
-  hash:         () => faker.random.alphaNumeric(40),
+  secret:       () => faker.string.alphanumeric(32),
+  token:        () => faker.string.alphanumeric(40),
+  accessToken:  () => faker.string.alphanumeric(40),
+  refreshToken: () => faker.string.alphanumeric(40),
+  hash:         () => faker.string.alphanumeric(40),
   // misc
   color:        () => faker.color.human(),
   locale:       () => faker.helpers.arrayElement(["en-US", "ko-KR", "ja-JP", "fr-FR", "de-DE"]),
@@ -50,7 +50,7 @@ const STRING_HINTS: Record<string, () => string> = {
 }
 
 const SUFFIX_HINTS: [string, () => string][] = [
-  ["Id",   () => faker.datatype.uuid()],
+  ["Id",   () => faker.string.uuid()],
   ["At",   () => faker.date.recent().toISOString()],
   ["Date", () => faker.date.recent().toISOString()],
   ["Url",  () => faker.internet.url()],

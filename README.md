@@ -11,7 +11,7 @@ No bundler configuration required. Works with Turbopack, SWC, Vite, webpack, Nex
 npm install type-mocker
 ```
 
-Requires Node.js 14.18 or later.
+Requires Node.js 20.19 or later.
 
 ---
 

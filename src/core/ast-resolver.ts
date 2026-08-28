@@ -155,7 +155,7 @@ export function typeNodeToMock(
     case ts.SyntaxKind.StringKeyword:
       return fieldName ? getStringHint(fieldName) : faker.lorem.word()
     case ts.SyntaxKind.NumberKeyword:
-      return faker.datatype.number({ min: 0, max: 100 })
+      return faker.number.int({ min: 0, max: 100 })
     case ts.SyntaxKind.BooleanKeyword:
       return faker.datatype.boolean()
     case ts.SyntaxKind.NullKeyword:
@@ -181,7 +181,7 @@ export function typeNodeToMock(
     }
 
     case ts.SyntaxKind.ArrayType: {
-      const len = faker.datatype.number({ min: 1, max: 4 })
+      const len = faker.number.int({ min: 1, max: 4 })
       return Array.from({ length: len }, () =>
         typeNodeToMock((node as ts.ArrayTypeNode).elementType, typeMap, undefined, ctx),
       )
@@ -270,7 +270,7 @@ function resolveTypeReference(
     return faker.date.recent().toISOString()
 
   if (typeName === "Array" && refNode.typeArguments?.length) {
-    const len = faker.datatype.number({ min: 1, max: 4 })
+    const len = faker.number.int({ min: 1, max: 4 })
     return Array.from({ length: len }, () =>
       typeNodeToMock(refNode.typeArguments![0], typeMap, undefined, ctx),
     )
