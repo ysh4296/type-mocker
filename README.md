@@ -1,7 +1,8 @@
 # type-mocker
 
-A CLI tool that scans your TypeScript types and auto-generates faker-based mock data.  
-No bundler configuration required. Works with Turbopack, SWC, Vite, webpack, Next.js — anything.
+- Runs entirely through a **CLI** — no bundler plugin or config required. Works with Turbopack, SWC, Vite, webpack, Next.js — anything.
+- Performs **TypeScript type-based mocking** — scans your project's types and generates realistic faker data matching each field.
+- **Write-then-swap workflow** — you write `createMock<T>()` / `createMockList<T>(n)` calls in your code, and running the CLI automatically swaps in the generated mock data as real arguments. No manual wiring, no runtime type reflection.
 
 ---
 

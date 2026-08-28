@@ -7,7 +7,7 @@
   "author": "cadi",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/ysh4296/unplugin-ts-mock.git"
+    "url": "git+https://github.com/ysh4296/type-mocker.git"
   },
   "keywords": [
     "typescript",
