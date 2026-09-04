@@ -1,6 +1,6 @@
 {
   "name": "type-mocker",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "TypeScript type → faker mock generator CLI",
   "type": "module",
   "license": "MIT",
